@@ -98,23 +98,21 @@ class MCPClient:
                 return message.content
 
             # Add assistant message (contains tool calls)
-            messages.append(
-    {
-        "role": "assistant",
-        "content": message.content,
-        "tool_calls": [
-            {
-                "id": tc.id,
-                "type": "function",
-                "function": {
-                    "name": tc.function.name,
-                    "arguments": tc.function.arguments,
-                },
-            }
-            for tc in message.tool_calls
-        ],
-    }
-)
+            messages.append({
+                "role": "assistant",
+                "content": message.content,
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in message.tool_calls
+                ],
+            })
 
             # Execute every requested tool
             for tool_call in message.tool_calls:
