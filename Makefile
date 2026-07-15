@@ -1,16 +1,16 @@
 FILES = client.py server.py
 MAIN = main.py
-PYTEST_SCRIPT = test_main.py
 PY = uv run python3
 
 install:
 	uv sync
 
 run:
-	$(PY) client.py server.py
+	clear
+	$(PY) main.py server.py
 
 test:
-	uv run pytest $(PYTEST_SCRIPT)
+	uv run pytest
 
 debug:
 	$(PY) -m pdb $(MAIN)

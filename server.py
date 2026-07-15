@@ -1,14 +1,15 @@
 import re
 import os
 import fnmatch
+import shlex
 import subprocess
 from mcp.server.fastmcp import FastMCP
 from dotenv import load_dotenv
 
 load_dotenv()
+
 REPO_ROOT = os.getenv("AGENT_REPO_ROOT")
 EVAL_SCRIPT_PATH = os.getenv("AGENT_EVAL_SCRIPT")
-
 
 mcp = FastMCP("agent_bob")
 
@@ -18,8 +19,13 @@ def _resolve_and_check(path: str) -> tuple[str, str | None]:
     REPO_ROOT. Returns (abs_path, error_message). error_message is None if
     the path is fine.
     """
-    abs_root = os.path.abspath(REPO_ROOT)
-    abs_path = os.path.abspath(os.path.join(abs_root, path) if not os.path.isabs(path) else path)
+    if not REPO_ROOT:
+        return "", "Error: AGENT_REPO_ROOT is not configured"
+    if not path:
+        return "", "Error: a path is required"
+
+    abs_root = os.path.realpath(REPO_ROOT)
+    abs_path = os.path.realpath(os.path.join(abs_root, path) if not os.path.isabs(path) else path)
 
     if os.path.commonpath([abs_root, abs_path]) != abs_root:
         return abs_path, f"Error: path '{path}' is outside the allowed directory ({abs_root})"
@@ -120,6 +126,8 @@ def list_files(directory: str, pattern: str = "*") -> list[str]:
 @mcp.tool()
 def search_code(pattern: str, file_pattern: str = "*.py") -> str:
     """Grep-like search across the repo. Returns 'path:line content' rows."""
+    if not REPO_ROOT:
+        return "Error: AGENT_REPO_ROOT is not configured"
     res = []
     for root, dirs, files in os.walk(REPO_ROOT):
         # Skip common noise directories so results stay useful/fast.
@@ -144,6 +152,8 @@ def search_code(pattern: str, file_pattern: str = "*.py") -> str:
 @mcp.tool()
 def search_function_or_class_definition_in_code(name: str) -> str:
     """Find the definition of a function or class by name."""
+    if not REPO_ROOT:
+        return "Error: AGENT_REPO_ROOT is not configured"
     res = []
     pattern = re.compile(rf"^\s*(?:async\s+def|def|class)\s+{re.escape(name)}\b")
 
@@ -169,6 +179,8 @@ def search_function_or_class_definition_in_code(name: str) -> str:
 @mcp.tool()
 def find_references(name: str, filepath: str, line: int) -> str:
     """Find all usages of a symbol, excluding its own definition site."""
+    if not REPO_ROOT:
+        return "Error: AGENT_REPO_ROOT is not configured"
     abs_def_path, err = _resolve_and_check(filepath)
     if err:
         return err
@@ -201,7 +213,9 @@ def find_references(name: str, filepath: str, line: int) -> str:
 @mcp.tool()
 def run_tests() -> str:
     """Execute the evaluation script and report the outcome."""
-    if not os.path.isfile(EVAL_SCRIPT_PATH):
+    if not REPO_ROOT:
+        return "Error: AGENT_REPO_ROOT is not configured"
+    if not EVAL_SCRIPT_PATH or not os.path.isfile(EVAL_SCRIPT_PATH):
         return f"Error: eval script not found at {EVAL_SCRIPT_PATH}"
 
     try:
@@ -227,6 +241,8 @@ def run_tests() -> str:
 @mcp.tool()
 def get_patch() -> str:
     """Return the unified git diff of all changes made to the repository."""
+    if not REPO_ROOT:
+        return "Error: AGENT_REPO_ROOT is not configured"
     try:
         result = subprocess.run(
             ["git", "-c", "core.fileMode=false", "diff"],
@@ -250,7 +266,7 @@ def get_patch() -> str:
 
 
 @mcp.tool()
-def run_command(command: str, workdir: str = REPO_ROOT) -> str:
+def run_command(command: str, workdir: str = ".") -> str:
     """Execute a shell command in the specified working directory.
 
     Returns stdout, stderr, and exit code together so the LLM always has
@@ -264,9 +280,11 @@ def run_command(command: str, workdir: str = REPO_ROOT) -> str:
         return f"Error: working directory not found: {workdir}"
 
     try:
+        args = shlex.split(command)
+        if not args:
+            return "Error: command is empty"
         result = subprocess.run(
-            command,
-            shell=True,
+            args,
             cwd=abs_workdir,
             capture_output=True,
             text=True,
@@ -274,6 +292,8 @@ def run_command(command: str, workdir: str = REPO_ROOT) -> str:
         )
     except subprocess.TimeoutExpired:
         return f"Error: command timed out after 120s: {command}"
+    except ValueError as e:
+        return f"Error: invalid command: {e}"
     except OSError as e:
         return f"Error: could not run command: {e}"
 
