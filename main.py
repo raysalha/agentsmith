@@ -11,15 +11,15 @@ from system_prompt import build_system_prompt
 
 load_dotenv()
 
-LLM_MODEL = os.getenv("OPENROUTER_LLM")
+LLM_MODEL = os.getenv("GROQ_LLM")
 MAX_TOOL_TURNS = 10
 
 class Orchestrator:
     def __init__(self):
         self.exit_stack = AsyncExitStack()
         self.llm = OpenAI(
-            api_key=os.getenv("OPENROUTER_API"),
-            base_url=os.getenv("OPENROUTER_URL"),
+            api_key=os.getenv("GROQ_API"),
+            base_url=os.getenv("GROQ_URL"),
         )
 
         self.sandbox = Sandbox(SandboxConfig(), "server.py")
@@ -100,7 +100,7 @@ async def main():
         await client.sandbox.start_mcp_client()
 
         # Check if we have a valid API key to continue
-        api_key = os.getenv("OPENROUTER_API")
+        api_key = os.getenv("GROQ_API")
         if not api_key:
             print("Invalid or no API key")
             return

@@ -20,7 +20,8 @@ class Sandbox:
     async def start_mcp_client(self):
         self.client = MCPClient()
         await self.client.connect_to_server(self.server)
-        await self._build_namespace()
+        response = await self.client.session.list_tools()
+        self.tool_names = [t.name for t in response.tools]
 
     def safe_import(self, name, globals=None, locals=None, fromlist=(), level=0):
         if any(name == allowed or (allowed.endswith(".*") and name.startswith(allowed[:-1]))
@@ -32,49 +33,17 @@ class Sandbox:
     def final_answer(self, answer):
         raise FinalAnswer(str(answer))
 
-    async def _build_namespace(self):
-        response = await self.client.session.list_tools()
-        loop = asyncio.get_running_loop()
-
-        def make_wrapper(tool_name):
-            def wrapper(**kwargs):
-                future = asyncio.run_coroutine_threadsafe(
-                    self.client.session.call_tool(tool_name, kwargs), loop
-                )
-                result = future.result(timeout=self.max_execution_time_seconds)
-                return "\n".join(b.text for b in result.content if hasattr(b, "text"))
-            return wrapper
-
-        self.namespace = {
-            "__builtins__": {
-                "print": print,
-                "len": len,
-                "range": range,
-                "str": str,
-                "int": int,
-                "float": float,
-                "bool": bool,
-                "list": list,
-                "dict": dict,
-                "__import__": self.safe_import,},  # your existing safe builtins dict
-            "final_answer": self.final_answer,
-        }
-        for tool in response.tools:
-            self.namespace[tool.name] = make_wrapper(tool.name)
-
     async def run(self, code: str) -> "SandboxResult":
         """Execute one model turn in a separate process.
 
         MCP sessions are not safe to share with a child process, so tool calls are
         sent back to this process over a pipe and executed against the live session.
         """
-        if self.namespace is None:
-            raise RuntimeError("Namespace not initialized — call _build_namespace() first")
 
         parent_conn, child_conn = multiprocessing.Pipe()
-        process = multiprocessing.get_context().Process(
+        process = multiprocessing.get_context("spawn").Process(
             target=_execute_in_child,
-            args=(child_conn, code, self.authorized_imports, _tool_names(self.namespace)),
+            args=(child_conn, code, self.authorized_imports, self.tool_names, self.max_memory_mb),
         )
         process.start()
         child_conn.close()
@@ -127,7 +96,7 @@ class Sandbox:
             await self.client.exit_stack.aclose()
 
 
-class FinalAnswer(BaseException):
+class FinalAnswer(Exception):
     def __init__(self, answer: str):
         self.answer = answer
 
@@ -143,8 +112,16 @@ def _tool_names(namespace: dict) -> list[str]:
     return [name for name in namespace if name not in {"__builtins__", "final_answer"}]
 
 
-def _execute_in_child(conn, code: str, authorized_imports: list[str], tool_names: list[str]) -> None:
+def _execute_in_child(conn, code: str, authorized_imports: list[str], tool_names: list[str], max_memory_mb) -> None:
     """Child-process entry point for untrusted model code."""
+
+    import resource
+    try:
+        max_bytes = max_memory_mb * 1024 * 1024
+        resource.setrlimit(resource.RLIMIT_AS, (max_bytes, max_bytes))
+    except (ValueError, resource.error):
+        pass
+
     stdout_buf = io.StringIO()
 
     def safe_import(name, globals=None, locals=None, fromlist=(), level=0):
@@ -166,7 +143,7 @@ def _execute_in_child(conn, code: str, authorized_imports: list[str], tool_names
         "__builtins__": {
             "print": print, "len": len, "range": range, "str": str,
             "int": int, "float": float, "bool": bool, "list": list,
-            "dict": dict, "open": open, "__import__": safe_import,
+            "dict": dict, "__import__": safe_import,
         },
         "final_answer": lambda answer: (_ for _ in ()).throw(FinalAnswer(str(answer))),
     }

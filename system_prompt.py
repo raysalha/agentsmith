@@ -18,6 +18,8 @@ RULES
 - The repository root is `.`. Use repository-relative paths with file tools; do not use hard-coded sandbox paths.
 - Respond or complete the task with the least amount of turns possible.
 
+in the name of fuck do NOT USE "open" OR "with open" YOU ARE NOT ALLOWED.
+
 AVAILABLE TOOLS
 {tools_doc}
 - final_answer(answer): submit your final result and stop.
