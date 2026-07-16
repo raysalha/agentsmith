@@ -11,10 +11,6 @@ class MCPClient:
         # Initialize session and client objects
         self.session: ClientSession | None = None
         self.exit_stack = AsyncExitStack()
-        self.client = OpenAI(
-            api_key=os.getenv("OPENROUTER_API"),
-            base_url=os.getenv("OPENROUTER_URL"),
-        )
 
     async def connect_to_server(self, server_script_path: str):
         """Connect to an MCP server

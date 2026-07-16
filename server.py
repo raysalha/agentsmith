@@ -267,24 +267,16 @@ def get_patch() -> str:
 
 @mcp.tool()
 def run_command(command: str, workdir: str = ".") -> str:
-    """Execute a shell command in the specified working directory.
-
-    Returns stdout, stderr, and exit code together so the LLM always has
-    explicit feedback about what happened.
-    """
     abs_workdir, err = _resolve_and_check(workdir)
     if err:
         return err
-
     if not os.path.isdir(abs_workdir):
         return f"Error: working directory not found: {workdir}"
 
     try:
-        args = shlex.split(command)
-        if not args:
-            return "Error: command is empty"
         result = subprocess.run(
-            args,
+            command,
+            shell=True,          # <-- lets >, |, &&, heredocs etc. work
             cwd=abs_workdir,
             capture_output=True,
             text=True,
@@ -292,16 +284,10 @@ def run_command(command: str, workdir: str = ".") -> str:
         )
     except subprocess.TimeoutExpired:
         return f"Error: command timed out after 120s: {command}"
-    except ValueError as e:
-        return f"Error: invalid command: {e}"
     except OSError as e:
         return f"Error: could not run command: {e}"
 
-    return (
-        f"exit_code: {result.returncode}\n"
-        f"--- stdout ---\n{result.stdout}\n"
-        f"--- stderr ---\n{result.stderr}"
-    )
+    return f"exit_code: {result.returncode}\n--- stdout ---\n{result.stdout}\n--- stderr ---\n{result.stderr}"
 
 
 def main():
