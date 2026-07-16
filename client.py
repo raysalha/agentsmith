@@ -1,9 +1,7 @@
-import os
 from contextlib import AsyncExitStack
 from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from openai import OpenAI
 
 
 class MCPClient:

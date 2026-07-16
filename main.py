@@ -37,14 +37,14 @@ class Orchestrator:
         ]
 
         for i in range(MAX_TOOL_TURNS):
-            print(f"TURN: ({i}/{MAX_TOOL_TURNS})")
+            print(f"TURN: ({i+1}/{MAX_TOOL_TURNS}):")
             response = self.llm.chat.completions.create(
                 model=LLM_MODEL,
                 messages=messages,
             )
 
             message = response.choices[0].message
-            print("LLM RESPONSE:\n", message.content)
+            print(message.content)
 
             try:
                 matches = re.findall(r"```python\s*\n([\s\S]*?)\n```", message.content)
@@ -59,9 +59,7 @@ class Orchestrator:
                 if result.error:
                     observation += f"\n[ERROR] {result.error}"
                 messages.append({"role": "user", "content": "Sandbox output:\n" + observation})
-            
-            if not matches:
-                messages.append({"role": "user", "content": "Provide exactly one Python code block or call final_answer()."})
+                print("SANDBOX:\n", observation)
 
         return "Unable to complete the task within the tool-turn limit."
 
