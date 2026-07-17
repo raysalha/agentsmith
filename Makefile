@@ -7,7 +7,7 @@ install:
 
 run:
 	clear
-	$(PY) main.py server.py
+	$(PY) main.py --task-file task.json --output solution.json --model-name openrouter/free --provider-url https://openrouter.ai/api/v1
 
 test:
 	uv run pytest

@@ -1,4 +1,6 @@
+import argparse
 import asyncio
+import json
 import os
 import sys
 import re
@@ -7,20 +9,20 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from contextlib import AsyncExitStack
 from sandbox import Sandbox
-from data_models import SandboxConfig
+from data_models import MBPPTaskInput, SWEBenchTaskInput, SandboxConfig
 from system_prompt import build_system_prompt
 
 load_dotenv()
 
-LLM_MODEL = os.getenv("OPENROUTER_LLM")
 MAX_TOOL_TURNS = 10
 
 class Orchestrator:
-    def __init__(self):
+    def __init__(self, model: str, url: str):
         self.exit_stack = AsyncExitStack()
+        self.model = model
         self.llm = OpenAI(
             api_key=os.getenv("OPENROUTER_API"),
-            base_url=os.getenv("OPENROUTER_URL"),
+            base_url=url,
         )
 
         self.sandbox = Sandbox(SandboxConfig(), "server.py")
@@ -40,7 +42,7 @@ class Orchestrator:
         for i in range(MAX_TOOL_TURNS):
             print(f"TURN: ({i+1}/{MAX_TOOL_TURNS}):")
             response = self.llm.chat.completions.create(
-                model=LLM_MODEL,
+                model=self.model,
                 messages=messages,
             )
 
@@ -107,22 +109,37 @@ class Orchestrator:
 
 
 async def main():
-    if len(sys.argv) < 2:
-        print("Usage: python main.py <path_to_server_script>")
-        sys.exit(1)
+    # if len(sys.argv) < 2:
+    #     print("Usage: python main.py <path_to_server_script>")
+    #     sys.exit(1)
 
-    client = Orchestrator()
-    client.sandbox.server = sys.argv[1]
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--task-file", default="task.json")
+    ap.add_argument("--output", default="solution.json")
+    ap.add_argument("--model-name", default="openrouter/free")
+    ap.add_argument("--provider-url", default="https://openrouter.ai/api/v1")
+    args = ap.parse_args()
+
+    with open(args.task_file, "r") as f:
+        data = json.load(f)
+
+    task = MBPPTaskInput.model_validate(data)
+
+    client = Orchestrator(args.model_name, args.provider_url)
+
     try:
         await client.sandbox.start_mcp_client()
 
-        # Check if we have a valid API key to continue
         api_key = os.getenv("OPENROUTER_API")
         if not api_key:
             print("Invalid or no API key")
             return
 
-        await client.chat_loop()
+        if len(sys.argv) == 1:
+            await client.chat_loop()
+        else:
+            result = await client.process_query(task.task_definition)
+            print(result)
     finally:
         await client.cleanup()
 
