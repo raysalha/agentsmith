@@ -2,6 +2,7 @@ import asyncio
 import os
 import sys
 import re
+from misc import *
 from dotenv import load_dotenv
 from openai import OpenAI
 from contextlib import AsyncExitStack
@@ -11,25 +12,25 @@ from system_prompt import build_system_prompt
 
 load_dotenv()
 
-LLM_MODEL = os.getenv("GROQ_LLM")
+LLM_MODEL = os.getenv("OPENROUTER_LLM")
 MAX_TOOL_TURNS = 10
 
 class Orchestrator:
     def __init__(self):
         self.exit_stack = AsyncExitStack()
         self.llm = OpenAI(
-            api_key=os.getenv("GROQ_API"),
-            base_url=os.getenv("GROQ_URL"),
+            api_key=os.getenv("OPENROUTER_API"),
+            base_url=os.getenv("OPENROUTER_URL"),
         )
 
         self.sandbox = Sandbox(SandboxConfig(), "server.py")
 
     async def process_query(self, query: str) -> str:
-        """Process a query using GROQ and MCP tools."""
+        """Process a query using OPENROUTER and MCP tools."""
 
         # Get MCP tools
         response = await self.sandbox.client.session.list_tools()
-        system_prompt = build_system_prompt(response.tools, self.sandbox.authorized_imports)
+        system_prompt = build_system_prompt(response.tools, self.sandbox.authorized_imports, self.sandbox.authorized_builtins)
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -51,17 +52,38 @@ class Orchestrator:
             except Exception:
                 matches = []
 
-            for match in matches:
-                result = await self.sandbox.run(match)
+            if len(matches) == 1:
+                result = await self.sandbox.run(matches[0])
                 if result.final_answer is not None:
-                    return result.final_answer
+                    return f"{GREEN}FINAL ANSWER: {result.final_answer}{RESET}"
                 observation = result.output
                 if result.error:
-                    observation += f"\n[ERROR] {result.error}"
+                    observation += f"\n{RED}[ERROR] {result.error}{RESET}"
+                messages.append({
+                    "role": "assistant",
+                    "content": message.content,
+                })
                 messages.append({"role": "user", "content": "Sandbox output:\n" + observation})
-                print("SANDBOX:\n", observation)
+                print(f"{YELLOW}SANDBOX:\n{observation}{RESET}")
+            elif len(matches) > 0:
+                msg = "Sandbox output:\n[WARN] more than one code block provided. rejecting code"
+                print(YELLOW + msg + RESET)
+                messages.append({
+                    "role": "user",
+                    "content": msg
+                })
+            else:
+                msg = """Sandbox output:\n[WARN] No code provided.  If you are done, please write:
+                    ```python
+                    final_answer("your message")
+                    ```"""
+                print(YELLOW + msg + RESET)
+                messages.append({
+                    "role": "user",
+                    "content": msg
+                })
 
-        return "Unable to complete the task within the tool-turn limit."
+        return RED + "FINAL ANSWER: Unable to complete the task within the tool-turn limit." + RESET
 
     async def chat_loop(self):
         """Run an interactive chat loop"""
@@ -79,7 +101,7 @@ class Orchestrator:
 
             try:
                 response = await self.process_query(query)
-                print("\n" + response)
+                print(f"\n", response)
             except Exception as e:
                 print(f"\nError: {str(e)}")
 
@@ -100,7 +122,7 @@ async def main():
         await client.sandbox.start_mcp_client()
 
         # Check if we have a valid API key to continue
-        api_key = os.getenv("GROQ_API")
+        api_key = os.getenv("OPENROUTER_API")
         if not api_key:
             print("Invalid or no API key")
             return
@@ -111,4 +133,9 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        print(e)

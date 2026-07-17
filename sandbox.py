@@ -1,4 +1,5 @@
 import asyncio
+import builtins
 import contextlib
 from dataclasses import dataclass
 import io
@@ -7,31 +8,29 @@ from client import MCPClient
 from data_models import SandboxConfig
 
 
+AUTHORIZED_BUILTINS = (
+    "print", "len", "range", "str", "int", "float", "bool", "list", "dict",
+)
+
+
 class Sandbox:
     def __init__(self, conf: SandboxConfig, server: str):
-        self.allowed_directories = conf.allowed_directories
         self.authorized_imports = conf.authorized_imports
+        self.allowed_directories = conf.allowed_directories
+        self.authorized_builtins = list(AUTHORIZED_BUILTINS)
         self.max_execution_time_seconds = conf.max_execution_time_seconds
         self.max_memory_mb = conf.max_memory_mb
         self.server = server
         self.client: MCPClient | None = None
-        self.namespace: dict | None = None
 
     async def start_mcp_client(self):
         self.client = MCPClient()
         await self.client.connect_to_server(self.server)
         response = await self.client.session.list_tools()
-        self.tool_names = [t.name for t in response.tools]
-
-    def safe_import(self, name, globals=None, locals=None, fromlist=(), level=0):
-        if any(name == allowed or (allowed.endswith(".*") and name.startswith(allowed[:-1]))
-               for allowed in self.authorized_imports):
-            return __import__(name, globals, locals, fromlist, level)
-
-        raise ImportError(f"Import '{name}' is not allowed.")
-
-    def final_answer(self, answer):
-        raise FinalAnswer(str(answer))
+        self.tool_parameters = {
+            tool.name: tuple((tool.inputSchema or {}).get("properties", ()))
+            for tool in response.tools
+        }
 
     async def run(self, code: str) -> "SandboxResult":
         """Execute one model turn in a separate process.
@@ -43,7 +42,14 @@ class Sandbox:
         parent_conn, child_conn = multiprocessing.Pipe()
         process = multiprocessing.get_context("spawn").Process(
             target=_execute_in_child,
-            args=(child_conn, code, self.authorized_imports, self.tool_names, self.max_memory_mb),
+            args=(
+                child_conn,
+                code,
+                self.authorized_imports,
+                self.authorized_builtins,
+                self.tool_parameters,
+                self.max_memory_mb,
+            ),
         )
         process.start()
         child_conn.close()
@@ -108,11 +114,14 @@ class SandboxResult:
     error: str | None = None
 
 
-def _tool_names(namespace: dict) -> list[str]:
-    return [name for name in namespace if name not in {"__builtins__", "final_answer"}]
-
-
-def _execute_in_child(conn, code: str, authorized_imports: list[str], tool_names: list[str], max_memory_mb) -> None:
+def _execute_in_child(
+    conn,
+    code: str,
+    authorized_imports: list[str],
+    authorized_builtins: list[str],
+    tool_parameters: dict[str, tuple[str, ...]],
+    max_memory_mb: int,
+) -> None:
     """Child-process entry point for untrusted model code."""
 
     import resource
@@ -125,13 +134,24 @@ def _execute_in_child(conn, code: str, authorized_imports: list[str], tool_names
     stdout_buf = io.StringIO()
 
     def safe_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if any(name == allowed or (allowed.endswith(".*") and name.startswith(allowed[:-1]))
-               for allowed in authorized_imports):
+        if any(
+            name == allowed or (allowed.endswith(".*") and name.startswith(allowed[:-1]))
+            for allowed in authorized_imports
+        ):
             return __import__(name, globals, locals, fromlist, level)
         raise ImportError(f"Import '{name}' is not allowed.")
 
-    def make_wrapper(tool_name):
-        def wrapper(**kwargs):
+    def make_wrapper(tool_name, parameter_names):
+        def wrapper(*args, **kwargs):
+            if len(args) > len(parameter_names):
+                raise TypeError(
+                    f"{tool_name}() takes at most {len(parameter_names)} positional arguments "
+                    f"but {len(args)} were given"
+                )
+            for parameter_name, value in zip(parameter_names, args):
+                if parameter_name in kwargs:
+                    raise TypeError(f"{tool_name}() got multiple values for '{parameter_name}'")
+                kwargs[parameter_name] = value
             conn.send(("tool_call", tool_name, kwargs))
             message_type, payload = conn.recv()
             if message_type == "tool_result":
@@ -139,15 +159,18 @@ def _execute_in_child(conn, code: str, authorized_imports: list[str], tool_names
             raise RuntimeError(payload)
         return wrapper
 
+    def final_answer(answer):
+        raise FinalAnswer(str(answer))
+
     namespace = {
-        "__builtins__": {
-            "print": print, "len": len, "range": range, "str": str,
-            "int": int, "float": float, "bool": bool, "list": list,
-            "dict": dict, "__import__": safe_import,
-        },
-        "final_answer": lambda answer: (_ for _ in ()).throw(FinalAnswer(str(answer))),
+        "__builtins__": {name: getattr(builtins, name) for name in authorized_builtins}
+        | {"__import__": safe_import},
+        "final_answer": final_answer,
     }
-    namespace.update({name: make_wrapper(name) for name in tool_names})
+    namespace.update({
+        name: make_wrapper(name, parameter_names)
+        for name, parameter_names in tool_parameters.items()
+    })
 
     try:
         with contextlib.redirect_stdout(stdout_buf):
