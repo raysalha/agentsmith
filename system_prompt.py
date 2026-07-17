@@ -1,11 +1,13 @@
-def build_system_prompt(tools, authorized_imports: list[str], authorized_builtins: list[str]) -> str:
+from sandbox import Sandbox
+
+def build_system_prompt(sandbox: Sandbox) -> str:
     tool_lines = []
-    for t in tools:
+    for t in sandbox.client.tools:
         params = ", ".join((t.inputSchema or {}).get("properties", {}).keys())
         tool_lines.append(f"- {t.name}({params}): {t.description or 'no description'}")
     tools_doc = "\n".join(tool_lines)
-    imports_doc = ", ".join(authorized_imports)
-    builtins_doc = ", ".join(authorized_builtins)
+    imports_doc = ", ".join(sandbox.authorized_imports)
+    builtins_doc = ", ".join(sandbox.authorized_builtins)
 
     return f"""You are Agent Smith an autonomous software engineering agent.
 You solve tasks by writing Python code that executes inside a sandbox.

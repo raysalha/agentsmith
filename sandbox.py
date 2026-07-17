@@ -26,10 +26,9 @@ class Sandbox:
     async def start_mcp_client(self):
         self.client = MCPClient()
         await self.client.connect_to_server(self.server)
-        response = await self.client.session.list_tools()
         self.tool_parameters = {
             tool.name: tuple((tool.inputSchema or {}).get("properties", ()))
-            for tool in response.tools
+            for tool in self.client.tools
         }
 
     async def run(self, code: str) -> "SandboxResult":

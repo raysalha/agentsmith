@@ -296,5 +296,7 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (KeyboardInterrupt, Exception) as e:
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
         print(e)

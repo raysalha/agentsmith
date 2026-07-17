@@ -30,27 +30,24 @@ class Orchestrator:
     async def process_query(self, query: str) -> str:
         """Process a query using OPENROUTER and MCP tools."""
 
-        # Get MCP tools
-        response = await self.sandbox.client.session.list_tools()
-        system_prompt = build_system_prompt(response.tools, self.sandbox.authorized_imports, self.sandbox.authorized_builtins)
-
         messages = [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": build_system_prompt(self.sandbox)},
             {"role": "user", "content": query},
         ]
 
         for i in range(MAX_TOOL_TURNS):
             print(f"TURN: ({i+1}/{MAX_TOOL_TURNS}):")
+
             response = self.llm.chat.completions.create(
                 model=self.model,
                 messages=messages,
             )
 
-            message = response.choices[0].message
-            print(message.content)
+            message = response.choices[0].message.content
+            print(message)
 
             try:
-                matches = re.findall(r"```python\s*\n([\s\S]*?)\n```", message.content)
+                matches = re.findall(r"```python\s*\n([\s\S]*?)\n```", message)
             except Exception:
                 matches = []
 
@@ -60,25 +57,17 @@ class Orchestrator:
                     return f"{GREEN}FINAL ANSWER: {result.final_answer}{RESET}"
                 observation = result.output
                 if result.error:
-                    observation += f"\n{RED}ERROR: {result.error}{RESET}"
+                    observation += f"{RED}ERROR: {result.error}{RESET}"
 
-                messages.append({"role": "assistant", "content": message.content})
-
-                messages.append({"role": "user", "content": "Sandbox output:\n" + observation})
-
-                print(f"{YELLOW}SANDBOX:\n{observation}{RESET}")
             elif len(matches) > 0:
-                print(YELLOW + MORE_THAN_ONE_CODE_BLOCK + RESET)
-                messages.append({
-                    "role": "user",
-                    "content": MORE_THAN_ONE_CODE_BLOCK
-                })
+                observation = MORE_THAN_ONE_CODE_BLOCK
+
             else:
-                print(YELLOW + NO_CODE_BLOCK + RESET)
-                messages.append({
-                    "role": "user",
-                    "content": NO_CODE_BLOCK
-                })
+                observation = NO_CODE_BLOCK
+
+            messages.append({"role": "assistant", "content": message})
+            messages.append({"role": "user", "content": "Sandbox output:\n" + observation})
+            print(f"{YELLOW}SANDBOX:\n{observation}{RESET}")
 
         return RED + "FINAL ANSWER: Unable to complete the task within the tool-turn limit." + RESET
 
@@ -109,10 +98,6 @@ class Orchestrator:
 
 
 async def main():
-    # if len(sys.argv) < 2:
-    #     print("Usage: python main.py <path_to_server_script>")
-    #     sys.exit(1)
-
     ap = argparse.ArgumentParser()
     ap.add_argument("--task-file", default="task.json")
     ap.add_argument("--output", default="solution.json")
@@ -120,10 +105,12 @@ async def main():
     ap.add_argument("--provider-url", default="https://openrouter.ai/api/v1")
     args = ap.parse_args()
 
-    with open(args.task_file, "r") as f:
-        data = json.load(f)
-
-    task = MBPPTaskInput.model_validate(data)
+    try:
+        with open(args.task_file, "r") as f:
+            data = json.load(f)
+        task = MBPPTaskInput.model_validate(data)
+    except Exception:
+        task = None
 
     client = Orchestrator(args.model_name, args.provider_url)
 
@@ -135,11 +122,11 @@ async def main():
             print("Invalid or no API key")
             return
 
-        if len(sys.argv) == 1:
-            await client.chat_loop()
-        else:
+        if task != None:
             result = await client.process_query(task.task_definition)
             print(result)
+        else:
+            await client.chat_loop()
     finally:
         await client.cleanup()
 
