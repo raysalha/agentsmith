@@ -36,7 +36,7 @@ class Orchestrator:
         ]
 
         for i in range(MAX_TOOL_TURNS):
-            print(f"TURN: ({i+1}/{MAX_TOOL_TURNS}):")
+            print(f"\nTURN: ({i+1}/{MAX_TOOL_TURNS}):")
 
             response = self.llm.chat.completions.create(
                 model=self.model,
@@ -67,7 +67,7 @@ class Orchestrator:
 
             messages.append({"role": "assistant", "content": message})
             messages.append({"role": "user", "content": "Sandbox output:\n" + observation})
-            print(f"{YELLOW}SANDBOX:\n{observation}{RESET}")
+            print(f"\n{YELLOW}SANDBOX:\n{observation}{RESET}")
 
         return RED + "FINAL ANSWER: Unable to complete the task within the tool-turn limit." + RESET
 
@@ -87,7 +87,7 @@ class Orchestrator:
 
             try:
                 response = await self.process_query(query)
-                print(f"\n", response)
+                print(f"\n{response}")
             except Exception as e:
                 print(f"\nError: {str(e)}")
 

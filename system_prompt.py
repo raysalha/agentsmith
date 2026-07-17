@@ -147,11 +147,12 @@ Thought:
 I need to update the implementation.
 
 ```python
-edit_file(
+result = edit_file(
     filepath="./src/email.py",
     old_str="if x == None:",
     new_str="if x is None:",
 )
+print(result)
 ```
 
 ----------------------------------------
@@ -182,10 +183,6 @@ final_answer(
 ========================================
 INVALID RESPONSES
 ========================================
-
-INVALID:
-
-Hello!
 
 INVALID:
 
