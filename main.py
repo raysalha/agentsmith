@@ -58,29 +58,24 @@ class Orchestrator:
                     return f"{GREEN}FINAL ANSWER: {result.final_answer}{RESET}"
                 observation = result.output
                 if result.error:
-                    observation += f"\n{RED}[ERROR] {result.error}{RESET}"
-                messages.append({
-                    "role": "assistant",
-                    "content": message.content,
-                })
+                    observation += f"\n{RED}ERROR: {result.error}{RESET}"
+
+                messages.append({"role": "assistant", "content": message.content})
+
                 messages.append({"role": "user", "content": "Sandbox output:\n" + observation})
+
                 print(f"{YELLOW}SANDBOX:\n{observation}{RESET}")
             elif len(matches) > 0:
-                msg = "Sandbox output:\n[WARN] more than one code block provided. rejecting code"
-                print(YELLOW + msg + RESET)
+                print(YELLOW + MORE_THAN_ONE_CODE_BLOCK + RESET)
                 messages.append({
                     "role": "user",
-                    "content": msg
+                    "content": MORE_THAN_ONE_CODE_BLOCK
                 })
             else:
-                msg = """Sandbox output:\n[WARN] No code provided.  If you are done, please write:
-                    ```python
-                    final_answer("your message")
-                    ```"""
-                print(YELLOW + msg + RESET)
+                print(YELLOW + NO_CODE_BLOCK + RESET)
                 messages.append({
                     "role": "user",
-                    "content": msg
+                    "content": NO_CODE_BLOCK
                 })
 
         return RED + "FINAL ANSWER: Unable to complete the task within the tool-turn limit." + RESET
