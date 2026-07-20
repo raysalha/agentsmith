@@ -1,5 +1,6 @@
 import re
 import os
+import argparse
 import fnmatch
 import subprocess
 from mcp.server.fastmcp import FastMCP
@@ -290,7 +291,11 @@ def run_command(command: str, workdir: str = ".") -> str:
 
 
 def main():
-    mcp.run(transport="stdio")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--transport", choices=["stdio", "streamable-http"], default="stdio")
+    args = parser.parse_args()
+
+    mcp.run(transport=args.transport)
 
 
 if __name__ == "__main__":

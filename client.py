@@ -2,6 +2,7 @@ from contextlib import AsyncExitStack
 from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.client.streamable_http import streamable_http_client
 
 
 class MCPClient:
@@ -10,30 +11,29 @@ class MCPClient:
         self.session: ClientSession | None = None
         self.exit_stack = AsyncExitStack()
 
-    async def connect_to_server(self, server_script_path: str):
-        """Connect to an MCP server
-
-        Args:
-            server_script_path: Path to the server script (.py or .js)
-        """
-        is_python = server_script_path.endswith(".py")
-        is_js = server_script_path.endswith(".js")
-        if not (is_python or is_js):
-            raise ValueError("Server script must be a .py or .js file")
-
-        if is_python:
-            path = Path(server_script_path).resolve()
-            server_params = StdioServerParameters(
-                command="uv",
-                args=["--directory", str(path.parent), "run", path.name],
-                env=None,
+    async def connect_to_server(self, target: str):
+        if target.startswith(("http://", "https://")):
+            read, write, *_ = await self.exit_stack.enter_async_context(
+                streamable_http_client(target)
             )
         else:
-            server_params = StdioServerParameters(command="node", args=[server_script_path], env=None)
+            if target.endswith(".py"):
+                path = Path(target).resolve()
+                server_params = StdioServerParameters(
+                    command="uv",
+                    args=["--directory", str(path.parent), "run", path.name],
+                )
+            elif target.endswith(".js"):
+                server_params = StdioServerParameters(
+                    command="node",
+                    args=[target],
+                )
+            else:
+                raise ValueError("Target must be a Python/JS script or an HTTP URL.")
 
-        stdio_transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
-        self.stdio, self.write = stdio_transport
-        self.session = await self.exit_stack.enter_async_context(ClientSession(self.stdio, self.write))
+            read, write = await self.exit_stack.enter_async_context(stdio_client(server_params))
+
+        self.session = await self.exit_stack.enter_async_context(ClientSession(read, write))
 
         await self.session.initialize()
 

@@ -1,8 +1,10 @@
+import argparse
 import asyncio
 import builtins
 import contextlib
 from dataclasses import dataclass
 import io
+import json
 import multiprocessing
 from client import MCPClient
 from data_models import SandboxConfig
@@ -22,6 +24,7 @@ class Sandbox:
         self.max_memory_mb = conf.max_memory_mb
         self.server = server
         self.client: MCPClient | None = None
+        self.tool_parameters = {}
 
     async def start_mcp_client(self):
         self.client = MCPClient()
@@ -187,14 +190,67 @@ def _execute_in_child(
         conn.close()
 
 
-def main():
-    pass
+async def _async_main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--mcp-stdio", default=None, help='e.g. "python mcp_tools_mbpp.py"')
+    ap.add_argument("--mcp-server", default=None, help="URL for streamable HTTP MCP server")
+    ap.add_argument("config_file", nargs="?", default=None)
+    args = ap.parse_args()
 
+    conf = SandboxConfig()
 
-if __name__ == "__main__":
+    if (args.config_file):
+        with open(args.config_file, 'r') as f:
+            try:
+                conf_file = json.load(f)
+                conf.allowed_directories = conf_file["allowed_directories"]
+                conf.authorized_imports = conf_file["authorized_imports"]
+                conf.max_execution_time_seconds = conf_file["max_execution_time_seconds"]
+                conf.max_memory_mb  = conf_file["max_memory_mb"]
+            except Exception as e:
+                print("JSON format error:", e)
+
+    if (args.mcp_stdio):
+        sandbox = Sandbox(conf, args.mcp_stdio)
+    elif (args.mcp_server):
+        sandbox = Sandbox(conf, args.mcp_server)
+    else:
+        sandbox = Sandbox(conf, "")
+
+    full_query = ""
     try:
-        main()
+        if args.mcp_stdio != None or args.mcp_server != None:
+            await sandbox.start_mcp_client()
+
+        while True:
+            try:
+                query = input("\nQuery: ").strip()
+            except (EOFError, KeyboardInterrupt):
+                break
+
+            if query == "":
+                continue
+            if query == "quit":
+                break
+
+            full_query += query
+            if query[-1] == "\\":
+                full_query = full_query[:-1] + "\n"
+            else:
+                res = await sandbox.run(full_query)
+                print(res)
+                full_query = ""
+    finally:
+        await sandbox.close()
+
+def main():
+    try:
+        asyncio.run(_async_main())
     except KeyboardInterrupt:
         pass
     except Exception as e:
         print(e)
+
+
+if __name__ == "__main__":
+    main()

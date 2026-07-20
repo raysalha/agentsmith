@@ -17,7 +17,7 @@ load_dotenv()
 MAX_TOOL_TURNS = 10
 
 class Orchestrator:
-    def __init__(self, model: str, url: str):
+    def __init__(self, model: str, url: str, target: str):
         self.exit_stack = AsyncExitStack()
         self.model = model
         self.llm = OpenAI(
@@ -25,7 +25,7 @@ class Orchestrator:
             base_url=url,
         )
 
-        self.sandbox = Sandbox(SandboxConfig(), "server.py")
+        self.sandbox = Sandbox(SandboxConfig(), target)
 
     async def process_query(self, query: str) -> str:
         """Process a query using OPENROUTER and MCP tools."""
@@ -97,12 +97,13 @@ class Orchestrator:
         await self.exit_stack.aclose()
 
 
-async def main():
+async def real_main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--task-file", default="task.json")
     ap.add_argument("--output", default="solution.json")
     ap.add_argument("--model-name", default="openrouter/free")
     ap.add_argument("--provider-url", default="https://openrouter.ai/api/v1")
+    ap.add_argument("--target", default="server.py")
     args = ap.parse_args()
 
     try:
@@ -112,7 +113,7 @@ async def main():
     except Exception:
         task = None
 
-    client = Orchestrator(args.model_name, args.provider_url)
+    client = Orchestrator(args.model_name, args.provider_url, args.target)
 
     try:
         await client.sandbox.start_mcp_client()
@@ -131,9 +132,12 @@ async def main():
         await client.cleanup()
 
 
+def main():
+    asyncio.run(real_main())
+
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        main()
     except KeyboardInterrupt:
         pass
     except Exception as e:

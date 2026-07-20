@@ -12,3 +12,17 @@ dependencies = [
     "pydantic>=2.13.4",
     "requests>=2.34.2",
 ]
+
+[project.scripts]
+sandbox = "sandbox:main"
+mcp_server = "server:main"
+agent_smith = "main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+include = [
+    "*.py",
+]
