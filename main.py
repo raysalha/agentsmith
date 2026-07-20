@@ -103,7 +103,7 @@ async def real_main():
     ap.add_argument("--output", default="solution.json")
     ap.add_argument("--model-name", default="openrouter/free")
     ap.add_argument("--provider-url", default="https://openrouter.ai/api/v1")
-    ap.add_argument("--target", default="server.py")
+    ap.add_argument("--target", default=None)
     args = ap.parse_args()
 
     try:

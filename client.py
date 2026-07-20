@@ -11,7 +11,9 @@ class MCPClient:
         self.session: ClientSession | None = None
         self.exit_stack = AsyncExitStack()
 
-    async def connect_to_server(self, target: str):
+    async def connect_to_server(
+        self, target: str, allowed_directories: list[str] | None = None
+    ):
         if target.startswith(("http://", "https://")):
             read, write, *_ = await self.exit_stack.enter_async_context(
                 streamable_http_client(target)
@@ -19,9 +21,12 @@ class MCPClient:
         else:
             if target.endswith(".py"):
                 path = Path(target).resolve()
+                args = ["--directory", str(path.parent), "run", path.name]
+                for directory in allowed_directories or []:
+                    args.extend(["--allowed-directory", str(Path(directory).resolve())])
                 server_params = StdioServerParameters(
                     command="uv",
-                    args=["--directory", str(path.parent), "run", path.name],
+                    args=args,
                 )
             elif target.endswith(".js"):
                 server_params = StdioServerParameters(

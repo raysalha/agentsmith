@@ -28,7 +28,7 @@ class Sandbox:
 
     async def start_mcp_client(self):
         self.client = MCPClient()
-        await self.client.connect_to_server(self.server)
+        await self.client.connect_to_server(self.server, self.allowed_directories)
         self.tool_parameters = {
             tool.name: tuple((tool.inputSchema or {}).get("properties", ()))
             for tool in self.client.tools
