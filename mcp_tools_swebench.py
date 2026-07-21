@@ -314,7 +314,7 @@ def run_command(command: str, workdir: str = ".") -> str:
     return f"exit_code: {result.returncode}\n--- stdout ---\n{result.stdout}\n--- stderr ---\n{result.stderr}"
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--transport", choices=["stdio", "streamable-http"], default="stdio")
     parser.add_argument("--allowed-directory", action="append", default=[])

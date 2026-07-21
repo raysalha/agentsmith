@@ -1,8 +1,8 @@
-import os
 import argparse
 import io
 import traceback
 from contextlib import redirect_stdout
+from typing import Any
 from mcp.server.fastmcp import FastMCP
 from dotenv import load_dotenv
 
@@ -16,14 +16,10 @@ mcp = FastMCP("agent_bob")
 
 @mcp.tool()
 def run_tests(code: str) -> str:
-    """
-    Execute generated code against a list of tests and Returns a human-readable report.
-    """
+    """Execute generated code against a list of tests and Returns a human-readable report."""
 
-    namespace = {}
-
+    namespace: dict[Any, Any] = {}
     stdout = io.StringIO()
-
     try:
         with redirect_stdout(stdout):
             # Execute required imports
@@ -57,7 +53,6 @@ def run_tests(code: str) -> str:
         )
 
     report = []
-
     report.append(f"Passed {passed}/{len(TESTS)} tests.")
 
     output = stdout.getvalue()
@@ -70,8 +65,8 @@ def run_tests(code: str) -> str:
 
         for failure in failed:
             report.append(f"Test #{failure['index']}:")
-            report.append(failure["test"])
-            report.append(failure["traceback"])
+            report.append(str(failure["test"]))
+            report.append(str(failure["traceback"]))
 
     else:
         report.append("\nAll tests passed.\nyou can now run final_answer()")
@@ -79,7 +74,7 @@ def run_tests(code: str) -> str:
     return "\n".join(report)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--transport", choices=["stdio", "streamable-http"], default="stdio")
     parser.add_argument("--allowed-directory", action="append", default=[])

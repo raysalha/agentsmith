@@ -3,7 +3,8 @@ import asyncio
 import json
 import os
 import re
-from misc import *
+from typing import Any
+from misc import RED, GREEN, YELLOW, RESET, NO_CODE_BLOCK, MORE_THAN_ONE_CODE_BLOCK
 from dotenv import load_dotenv
 from openai import OpenAI
 from contextlib import AsyncExitStack
@@ -14,6 +15,7 @@ from system_prompt import build_system_prompt, build_system_prompt_mbpp
 load_dotenv()
 
 MAX_TOOL_TURNS = 10
+
 
 class Orchestrator:
     def __init__(self, model: str, url: str, target: str):
@@ -46,7 +48,7 @@ class Orchestrator:
             print(message)
 
             try:
-                matches = re.findall(r"```python\s*([\s\S]*?)```", message)
+                matches = re.findall(r"```python\s*([\s\S]*?)```", "" if message is None else message)
             except Exception:
                 matches = []
 
@@ -64,13 +66,13 @@ class Orchestrator:
             else:
                 observation = NO_CODE_BLOCK
 
-            messages.append({"role": "assistant", "content": message})
+            messages.append({"role": "assistant", "content": "" if message is None else message})
             messages.append({"role": "user", "content": "Sandbox output:\n" + observation})
             print(f"\n{YELLOW}SANDBOX:\n{observation}{RESET}")
 
         return RED + "FINAL ANSWER: Unable to complete the task within the tool-turn limit." + RESET
 
-    async def process_mbpp(self, task: MBPPTaskInput, args) -> SolutionOutput:
+    async def process_mbpp(self, task: MBPPTaskInput, args: Any) -> SolutionOutput:
         system_prompt = build_system_prompt_mbpp(self.sandbox)
 
         messages = [
@@ -86,9 +88,9 @@ Function Definition: {task.function_definition}"""},
 
         steps = []
         success = False
-        final_answer = ""
-        sandbox_input = ""
         for i in range(MAX_TOOL_TURNS):
+            if (success):
+                break
             print(f"\nTURN: ({i+1}/{MAX_TOOL_TURNS}):")
 
             response = self.llm.chat.completions.create(
@@ -100,7 +102,7 @@ Function Definition: {task.function_definition}"""},
             print(message)
 
             try:
-                matches = re.findall(r"```python\s*([\s\S]*?)```", message)
+                matches = re.findall(r"```python\s*([\s\S]*?)```", "" if message is None else message)
             except Exception:
                 matches = []
 
@@ -110,7 +112,6 @@ Function Definition: {task.function_definition}"""},
                 if result.final_answer is not None:
                     success = True
                     final_answer = f"{GREEN}FINAL ANSWER: {result.final_answer}{RESET}"
-                    break
                 observation = result.output
                 if result.error:
                     observation += f"{RED}ERROR: {result.error}{RESET}"
@@ -119,20 +120,20 @@ Function Definition: {task.function_definition}"""},
             else:
                 observation = NO_CODE_BLOCK
 
-            messages.append({"role": "assistant", "content": message})
+            messages.append({"role": "assistant", "content": "" if message is None else message})
             messages.append({"role": "user", "content": "Sandbox output:\n" + observation})
             print(f"\n{YELLOW}SANDBOX:\n{observation}{RESET}")
 
             step = StepMetrics(
-                step = i+1,
+                step=i + 1,
                 input_tokens=0,
                 output_tokens=0,
                 request_time_ms=0.0,
                 api_url=args.provider_url,
                 model_name=args.model_name,
-                llm_output=message,
-                sandbox_input=sandbox_input,
-                sandbox_output=observation,
+                llm_output="" if message is None else message,
+                sandbox_input="" if sandbox_input is None else sandbox_input,
+                sandbox_output="" if observation is None else observation,
                 retries=0
             )
             steps.append(step)
@@ -156,10 +157,10 @@ Function Definition: {task.function_definition}"""},
             error=error
         )
 
-    async def process_swebench(self, task: SWEBenchTaskInput, args) -> SolutionOutput:
+    async def process_swebench(self, task: SWEBenchTaskInput, args: Any) -> SolutionOutput:
         pass
 
-    async def chat_loop(self):
+    async def chat_loop(self) -> None:
         """Run an interactive chat loop"""
         print("\nMCP Client Started!")
         print("Type your queries or 'quit' to exit.")
@@ -179,13 +180,13 @@ Function Definition: {task.function_definition}"""},
             except Exception as e:
                 print(f"\nError: {str(e)}")
 
-    async def cleanup(self):
+    async def cleanup(self) -> None:
         """Clean up resources"""
         await self.sandbox.close()
         await self.exit_stack.aclose()
 
 
-async def real_main():
+async def real_main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--task-file", default="task.json")
     ap.add_argument("--output", default="solution.json")
@@ -194,7 +195,7 @@ async def real_main():
     ap.add_argument("--target", default=None)
     args = ap.parse_args()
 
-    if args.task_file != None:
+    if args.task_file is not None:
         try:
             with open(args.task_file, "r") as f:
                 data = json.load(f)
@@ -220,11 +221,15 @@ async def real_main():
             print("Invalid or no API key")
             return
 
-        if task != None:
+        if task is not None:
             if isinstance(task, MBPPTaskInput):
                 result = await client.process_mbpp(task, args)
             elif isinstance(task, SWEBenchTaskInput):
                 result = await client.process_swebench(task, args)
+            print(result.solution)
+            print("\n\n")
+            print(result.steps)
+            print("\n\n")
             print(result)
         else:
             await client.chat_loop()
@@ -232,8 +237,9 @@ async def real_main():
         await client.cleanup()
 
 
-def main():
+def main() -> None:
     asyncio.run(real_main())
+
 
 if __name__ == "__main__":
     try:

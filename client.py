@@ -6,14 +6,17 @@ from mcp.client.streamable_http import streamable_http_client
 
 
 class MCPClient:
-    def __init__(self):
+    def __init__(self) -> None:
         # Initialize session and client objects
         self.session: ClientSession | None = None
         self.exit_stack = AsyncExitStack()
 
     async def connect_to_server(
-        self, target: str, allowed_directories: list[str] | None = None, imports: list[str] | None = None, tests: list[str] | None = None,
-    ):
+        self, target: str,
+        allowed_directories: list[str] | None = None,
+        imports: list[str] | None = None,
+        tests: list[str] | None = None,
+    ) -> None:
         if target.startswith(("http://", "https://")):
             read, write, *_ = await self.exit_stack.enter_async_context(
                 streamable_http_client(target)

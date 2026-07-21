@@ -1,4 +1,4 @@
-FILES = client.py server.py
+FILES = client.py data_models.py main.py mcp_tools_mbpp.py mcp_tools_swebench.py misc.py sandbox.py system_prompt.py
 MAIN = main.py
 PY = uv run python3
 
@@ -26,7 +26,7 @@ clean:
 
 lint:
 	$(PY) -m flake8 $(FILES)
-	$(PY) -m mypy . --warn-return-any \
+	$(PY) -m mypy $(FILES) --warn-return-any \
 		--warn-unused-ignores \
 		--ignore-missing-imports \
 		--disallow-untyped-defs \
@@ -34,4 +34,4 @@ lint:
 
 lint-strict:
 	$(PY) -m flake8 $(FILES)
-	$(PY) -m mypy . --strict
+	$(PY) -m mypy $(FILES) --strict

@@ -11,6 +11,8 @@ dependencies = [
     "openai>=2.44.0",
     "pydantic>=2.13.4",
     "requests>=2.34.2",
+    "flake8>=7.3.0",
+    "mypy>=2.3.0",
 ]
 
 [project.scripts]

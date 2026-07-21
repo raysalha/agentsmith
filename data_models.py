@@ -25,6 +25,7 @@ class SandboxConfig(BaseModel):
     max_execution_time_seconds: int = 30
     max_memory_mb: int = 512
 
+
 class MBPPTaskInput(BaseModel):
     """Input for MBPP task evaluation."""
     task_id: int

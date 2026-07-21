@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import io
 import json
 import multiprocessing
+from typing import Any, Optional
 from client import MCPClient
 from data_models import SandboxConfig
 
@@ -23,11 +24,10 @@ class Sandbox:
         self.max_execution_time_seconds = conf.max_execution_time_seconds
         self.max_memory_mb = conf.max_memory_mb
         self.server = server
-        self.client: MCPClient | None = None
+        self.client = MCPClient()
         self.tool_parameters = {}
 
-    async def start_mcp_client(self, imports: list[str] | None = None, tests: list[str] | None = None):
-        self.client = MCPClient()
+    async def start_mcp_client(self, imports: list[str] | None = None, tests: list[str] | None = None) -> None:
         await self.client.connect_to_server(self.server, self.allowed_directories, imports, tests)
         self.tool_parameters = {
             tool.name: tuple((tool.inputSchema or {}).get("properties", ()))
@@ -99,7 +99,7 @@ class Sandbox:
             process.join()
             parent_conn.close()
 
-    async def close(self):
+    async def close(self) -> None:
         if self.client is not None:
             await self.client.exit_stack.aclose()
 
@@ -123,7 +123,7 @@ def _execute_in_child(
     authorized_builtins: list[str],
     tool_parameters: dict[str, tuple[str, ...]],
     max_memory_mb: int,
-) -> None:
+) -> Any:
     """Child-process entry point for untrusted model code."""
 
     import resource
@@ -135,7 +135,7 @@ def _execute_in_child(
 
     stdout_buf = io.StringIO()
 
-    def safe_import(name, globals=None, locals=None, fromlist=(), level=0):
+    def safe_import(name: str, globals=None, locals=None, fromlist=(), level=0) -> Optional[Any]:
         if any(
             name == allowed or (allowed.endswith(".*") and name.startswith(allowed[:-1]))
             for allowed in authorized_imports
@@ -143,8 +143,8 @@ def _execute_in_child(
             return __import__(name, globals, locals, fromlist, level)
         raise ImportError(f"Import '{name}' is not allowed.")
 
-    def make_wrapper(tool_name, parameter_names):
-        def wrapper(*args, **kwargs):
+    def make_wrapper(tool_name: str, parameter_names: tuple[str, ...]) -> Any:
+        def wrapper(*args, **kwargs) -> Any:
             if len(args) > len(parameter_names):
                 raise TypeError(
                     f"{tool_name}() takes at most {len(parameter_names)} positional arguments "
@@ -161,8 +161,8 @@ def _execute_in_child(
             raise RuntimeError(payload)
         return wrapper
 
-    def final_answer(answer):
-        raise FinalAnswer(str(answer))
+    def final_answer(answer: str) -> None:
+        raise FinalAnswer(answer)
 
     namespace = {
         "__builtins__": {name: getattr(builtins, name) for name in authorized_builtins}
@@ -190,7 +190,7 @@ def _execute_in_child(
         conn.close()
 
 
-async def _async_main():
+async def _async_main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--mcp-stdio", default=None, help='e.g. "python mcp_tools_mbpp.py"')
     ap.add_argument("--mcp-server", default=None, help="URL for streamable HTTP MCP server")
@@ -206,7 +206,7 @@ async def _async_main():
                 conf.allowed_directories = conf_file["allowed_directories"]
                 conf.authorized_imports = conf_file["authorized_imports"]
                 conf.max_execution_time_seconds = conf_file["max_execution_time_seconds"]
-                conf.max_memory_mb  = conf_file["max_memory_mb"]
+                conf.max_memory_mb = conf_file["max_memory_mb"]
             except Exception as e:
                 print("JSON format error:", e)
 
@@ -219,7 +219,7 @@ async def _async_main():
 
     full_query = ""
     try:
-        if args.mcp_stdio != None or args.mcp_server != None:
+        if args.mcp_stdio is not None or args.mcp_server is not None:
             await sandbox.start_mcp_client()
 
         while True:
@@ -243,7 +243,8 @@ async def _async_main():
     finally:
         await sandbox.close()
 
-def main():
+
+def main() -> None:
     try:
         asyncio.run(_async_main())
     except KeyboardInterrupt:
