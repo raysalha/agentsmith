@@ -203,10 +203,7 @@ async def _async_main() -> None:
         with open(args.config_file, 'r') as f:
             try:
                 conf_file = json.load(f)
-                conf.allowed_directories = conf_file["allowed_directories"]
-                conf.authorized_imports = conf_file["authorized_imports"]
-                conf.max_execution_time_seconds = conf_file["max_execution_time_seconds"]
-                conf.max_memory_mb = conf_file["max_memory_mb"]
+                conf = SandboxConfig.model_validate(conf_file)
             except Exception as e:
                 print("JSON format error:", e)
 
@@ -222,9 +219,11 @@ async def _async_main() -> None:
         if args.mcp_stdio is not None or args.mcp_server is not None:
             await sandbox.start_mcp_client()
 
+        print("Type your queries or 'quit' to exit.")
+
         while True:
             try:
-                query = input("\nQuery: ").strip()
+                query = input("\n>>> ").strip()
             except (EOFError, KeyboardInterrupt):
                 break
 

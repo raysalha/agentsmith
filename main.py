@@ -4,7 +4,7 @@ import json
 import os
 import re
 from typing import Any
-from misc import RED, GREEN, YELLOW, RESET, NO_CODE_BLOCK, MORE_THAN_ONE_CODE_BLOCK
+from misc import RED, GREEN, YELLOW, RESET, NO_CODE_BLOCK, MORE_THAN_ONE_CODE_BLOCK, MBPP_MAX_TURN
 from dotenv import load_dotenv
 from openai import OpenAI
 from contextlib import AsyncExitStack
@@ -13,8 +13,6 @@ from data_models import MBPPTaskInput, SWEBenchTaskInput, SandboxConfig, Solutio
 from system_prompt import build_system_prompt, build_system_prompt_mbpp
 
 load_dotenv()
-
-MAX_TOOL_TURNS = 10
 
 
 class Orchestrator:
@@ -36,8 +34,8 @@ class Orchestrator:
             {"role": "user", "content": query},
         ]
 
-        for i in range(MAX_TOOL_TURNS):
-            print(f"\nTURN: ({i+1}/{MAX_TOOL_TURNS}):")
+        for i in range(MBPP_MAX_TURN):
+            print(f"\nTURN: ({i+1}/{MBPP_MAX_TURN}):")
 
             response = self.llm.chat.completions.create(
                 model=self.model,
@@ -91,10 +89,8 @@ Function Definition: {task.function_definition}"""},
         message = ""
         sandbox_input = ""
         observation = ""
-        for i in range(MAX_TOOL_TURNS):
-            if (success):
-                break
-            print(f"\nTURN: ({i+1}/{MAX_TOOL_TURNS}):")
+        for i in range(MBPP_MAX_TURN):
+            print(f"\nTURN: ({i+1}/{MBPP_MAX_TURN}):")
 
             response = self.llm.chat.completions.create(
                 model=self.model,
@@ -127,7 +123,7 @@ Function Definition: {task.function_definition}"""},
             messages.append({"role": "user", "content": "Sandbox output:\n" + observation})
             print(f"\n{YELLOW}SANDBOX:\n{observation}{RESET}")
 
-            step = StepMetrics(
+            steps.append(StepMetrics(
                 step=i + 1,
                 input_tokens=0,
                 output_tokens=0,
@@ -138,8 +134,9 @@ Function Definition: {task.function_definition}"""},
                 sandbox_input=sandbox_input,
                 sandbox_output=observation,
                 retries=0
-            )
-            steps.append(step)
+            ))
+            if (success):
+                break
 
         error = None
         if success is False:
@@ -233,7 +230,11 @@ async def real_main() -> None:
                 result = await client.process_mbpp(task, args)
             elif isinstance(task, SWEBenchTaskInput):
                 result = await client.process_swebench(task, args)
-            print(result.solution + "\n\n" + result.steps + "\n\n" + result)
+            print(result.solution)
+            print()
+            print(result.steps)
+            print()
+            print(result)
         else:
             await client.chat_loop()
     finally:
