@@ -88,6 +88,9 @@ Function Definition: {task.function_definition}"""},
 
         steps = []
         success = False
+        message = ""
+        sandbox_input = ""
+        observation = ""
         for i in range(MAX_TOOL_TURNS):
             if (success):
                 break
@@ -131,9 +134,9 @@ Function Definition: {task.function_definition}"""},
                 request_time_ms=0.0,
                 api_url=args.provider_url,
                 model_name=args.model_name,
-                llm_output="" if message is None else message,
-                sandbox_input="" if sandbox_input is None else sandbox_input,
-                sandbox_output="" if observation is None else observation,
+                llm_output=message,
+                sandbox_input=sandbox_input,
+                sandbox_output=observation,
                 retries=0
             )
             steps.append(step)
@@ -203,13 +206,17 @@ async def real_main() -> None:
         except Exception:
             task = None
 
-        if task is None:
+        if not task:
             try:
                 with open(args.task_file, "r") as f:
                     data = json.load(f)
                 task = SWEBenchTaskInput.model_validate(data)
             except Exception:
                 task = None
+
+        if not task:
+            print("Invalid task JSON")
+            return
 
     client = Orchestrator(args.model_name, args.provider_url, args.target)
 
@@ -226,11 +233,7 @@ async def real_main() -> None:
                 result = await client.process_mbpp(task, args)
             elif isinstance(task, SWEBenchTaskInput):
                 result = await client.process_swebench(task, args)
-            print(result.solution)
-            print("\n\n")
-            print(result.steps)
-            print("\n\n")
-            print(result)
+            print(result.solution + "\n\n" + result.steps + "\n\n" + result)
         else:
             await client.chat_loop()
     finally:
