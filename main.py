@@ -2,15 +2,14 @@ import argparse
 import asyncio
 import json
 import os
-import sys
 import re
 from misc import *
 from dotenv import load_dotenv
 from openai import OpenAI
 from contextlib import AsyncExitStack
 from sandbox import Sandbox
-from data_models import MBPPTaskInput, SWEBenchTaskInput, SandboxConfig
-from system_prompt import build_system_prompt
+from data_models import MBPPTaskInput, SWEBenchTaskInput, SandboxConfig, SolutionOutput, StepMetrics
+from system_prompt import build_system_prompt, build_system_prompt_mbpp
 
 load_dotenv()
 
@@ -21,7 +20,7 @@ class Orchestrator:
         self.exit_stack = AsyncExitStack()
         self.model = model
         self.llm = OpenAI(
-            api_key=os.getenv("OPENROUTER_API"),
+            api_key=os.getenv("OPENROUTER_API2"),
             base_url=url,
         )
 
@@ -47,7 +46,7 @@ class Orchestrator:
             print(message)
 
             try:
-                matches = re.findall(r"```python\s*\n([\s\S]*?)\n```", message)
+                matches = re.findall(r"```python\s*([\s\S]*?)```", message)
             except Exception:
                 matches = []
 
@@ -70,6 +69,95 @@ class Orchestrator:
             print(f"\n{YELLOW}SANDBOX:\n{observation}{RESET}")
 
         return RED + "FINAL ANSWER: Unable to complete the task within the tool-turn limit." + RESET
+
+    async def process_mbpp(self, task: MBPPTaskInput, args) -> SolutionOutput:
+        system_prompt = build_system_prompt_mbpp(self.sandbox)
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"""This is an MBPP task.
+Write the requested Python function using the exact function signature.
+Before calling final_answer(), you MUST verify your solution by calling: run_tests(code)
+Only call final_answer(code) after all tests pass.
+
+Task: {task.task_definition}
+Function Definition: {task.function_definition}"""},
+        ]
+
+        steps = []
+        success = False
+        final_answer = ""
+        sandbox_input = ""
+        for i in range(MAX_TOOL_TURNS):
+            print(f"\nTURN: ({i+1}/{MAX_TOOL_TURNS}):")
+
+            response = self.llm.chat.completions.create(
+                model=self.model,
+                messages=messages,
+            )
+
+            message = response.choices[0].message.content
+            print(message)
+
+            try:
+                matches = re.findall(r"```python\s*([\s\S]*?)```", message)
+            except Exception:
+                matches = []
+
+            if len(matches) == 1:
+                sandbox_input = matches[0]
+                result = await self.sandbox.run(sandbox_input)
+                if result.final_answer is not None:
+                    success = True
+                    final_answer = f"{GREEN}FINAL ANSWER: {result.final_answer}{RESET}"
+                    break
+                observation = result.output
+                if result.error:
+                    observation += f"{RED}ERROR: {result.error}{RESET}"
+            elif len(matches) > 0:
+                observation = MORE_THAN_ONE_CODE_BLOCK
+            else:
+                observation = NO_CODE_BLOCK
+
+            messages.append({"role": "assistant", "content": message})
+            messages.append({"role": "user", "content": "Sandbox output:\n" + observation})
+            print(f"\n{YELLOW}SANDBOX:\n{observation}{RESET}")
+
+            step = StepMetrics(
+                step = i+1,
+                input_tokens=0,
+                output_tokens=0,
+                request_time_ms=0.0,
+                api_url=args.provider_url,
+                model_name=args.model_name,
+                llm_output=message,
+                sandbox_input=sandbox_input,
+                sandbox_output=observation,
+                retries=0
+            )
+            steps.append(step)
+
+        error = None
+        if success is False:
+            error = RED + "Unable to complete the task within the tool-turn limit." + RESET
+
+        return SolutionOutput(
+            task_id=str(task.task_id),
+            benchmark="mbpp",
+            success=success,
+            solution=final_answer,
+            iterations=len(steps),
+            total_requests=0,
+            total_input_tokens=0,
+            total_output_tokens=0,
+            total_time_seconds=0,
+            steps=steps,
+            system_prompt=system_prompt,
+            error=error
+        )
+
+    async def process_swebench(self, task: SWEBenchTaskInput, args) -> SolutionOutput:
+        pass
 
     async def chat_loop(self):
         """Run an interactive chat loop"""
@@ -106,17 +194,26 @@ async def real_main():
     ap.add_argument("--target", default=None)
     args = ap.parse_args()
 
-    try:
-        with open(args.task_file, "r") as f:
-            data = json.load(f)
-        task = MBPPTaskInput.model_validate(data)
-    except Exception:
-        task = None
+    if args.task_file != None:
+        try:
+            with open(args.task_file, "r") as f:
+                data = json.load(f)
+            task = MBPPTaskInput.model_validate(data)
+        except Exception:
+            task = None
+
+        if task is None:
+            try:
+                with open(args.task_file, "r") as f:
+                    data = json.load(f)
+                task = SWEBenchTaskInput.model_validate(data)
+            except Exception:
+                task = None
 
     client = Orchestrator(args.model_name, args.provider_url, args.target)
 
     try:
-        await client.sandbox.start_mcp_client()
+        await client.sandbox.start_mcp_client(task.test_imports, task.test_list)
 
         api_key = os.getenv("OPENROUTER_API")
         if not api_key:
@@ -124,7 +221,10 @@ async def real_main():
             return
 
         if task != None:
-            result = await client.process_query(task.task_definition)
+            if isinstance(task, MBPPTaskInput):
+                result = await client.process_mbpp(task, args)
+            elif isinstance(task, SWEBenchTaskInput):
+                result = await client.process_swebench(task, args)
             print(result)
         else:
             await client.chat_loop()

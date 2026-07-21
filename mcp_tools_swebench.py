@@ -52,6 +52,7 @@ def _repository_root() -> str | None:
     """The first directory is the repository used for repo-wide operations."""
     return ALLOWED_DIRECTORIES[0] if ALLOWED_DIRECTORIES else None
 
+
 @mcp.tool()
 def read_file(filepath: str, start_line: int, end_line: int) -> str:
     """Read a file's content with line numbers, cat -n style."""

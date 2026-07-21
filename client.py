@@ -12,7 +12,7 @@ class MCPClient:
         self.exit_stack = AsyncExitStack()
 
     async def connect_to_server(
-        self, target: str, allowed_directories: list[str] | None = None
+        self, target: str, allowed_directories: list[str] | None = None, imports: list[str] | None = None, tests: list[str] | None = None,
     ):
         if target.startswith(("http://", "https://")):
             read, write, *_ = await self.exit_stack.enter_async_context(
@@ -24,6 +24,10 @@ class MCPClient:
                 args = ["--directory", str(path.parent), "run", path.name]
                 for directory in allowed_directories or []:
                     args.extend(["--allowed-directory", str(Path(directory).resolve())])
+                for imp in imports or []:
+                    args.extend(["--imports", str(imp)])
+                for test in tests or []:
+                    args.extend(["--tests", str(test)])
                 server_params = StdioServerParameters(
                     command="uv",
                     args=args,

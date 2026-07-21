@@ -7,7 +7,12 @@ install:
 
 run:
 	clear
-	$(PY) main.py --task-file task.json --output solution.json --model-name openrouter/free --provider-url https://openrouter.ai/api/v1
+	$(PY) main.py \
+		--task-file mbpp_task.json \
+		--output solution.json \
+		--model-name openrouter/free \
+		--provider-url https://openrouter.ai/api/v1 \
+		--target mcp_tools_mbpp.py
 
 test:
 	uv run pytest

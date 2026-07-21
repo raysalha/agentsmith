@@ -26,9 +26,9 @@ class Sandbox:
         self.client: MCPClient | None = None
         self.tool_parameters = {}
 
-    async def start_mcp_client(self):
+    async def start_mcp_client(self, imports: list[str] | None = None, tests: list[str] | None = None):
         self.client = MCPClient()
-        await self.client.connect_to_server(self.server, self.allowed_directories)
+        await self.client.connect_to_server(self.server, self.allowed_directories, imports, tests)
         self.tool_parameters = {
             tool.name: tuple((tool.inputSchema or {}).get("properties", ()))
             for tool in self.client.tools
