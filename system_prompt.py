@@ -187,6 +187,11 @@ INVALID RESPONSES
 
 INVALID:
 
+User Safety: safe
+Response Safety: safe
+
+INVALID:
+
 Thought:
 ...
 
@@ -219,6 +224,7 @@ Tool output:
 ...
 
 You never know tool outputs until the sandbox executes them.
+Do not output safety labels; follow the required Thought and single Python code-block format.
 
 =============================="""
 
@@ -372,6 +378,51 @@ Correct ONLY the formatting problem.
 Do NOT change the implementation unless the sandbox reports failing tests or a code execution error.
 
 ==============================
+INVALID RESPONSES
+==============================
+
+INVALID:
+
+User Safety: safe
+Response Safety: safe
+
+INVALID:
+
+Thought:
+...
+
+```python
+...
+```
+
+Some more text here.
+
+INVALID:
+
+```python
+...
+```
+
+```python
+...
+```
+
+INVALID:
+
+Thought:
+...
+
+No python block.
+
+INVALID:
+
+Tool output:
+...
+
+You never know tool outputs until the sandbox executes them.
+Do not output safety labels; follow the required Thought and single Python code-block format.
+
+==============================
 REMEMBER
 ==============================
 
@@ -382,4 +433,6 @@ REMEMBER
 - Never assume the tests passed.
 - Call `final_answer(code)` immediately after a successful `run_tests(code)`.
 - If the tests fail, print the test results and try again.
-- Never generate another Python code block after calling `final_answer(code)`."""
+- Never generate another Python code block after calling `final_answer(code)`.
+
+"""
