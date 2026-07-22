@@ -1,17 +1,17 @@
 FILES = client.py data_models.py main.py mcp_tools_mbpp.py mcp_tools_swebench.py misc.py sandbox.py system_prompt.py
-MAIN = main.py
-PY = uv run python3
+MAIN = agent_mbpp
+PY = uv run python3 -m
 
 install:
 	uv sync
 
 run:
 	clear
-	$(PY) main.py \
+	$(PY) $(MAIN) \
 		--task-file mbpp_task.json \
 		--output solution.json \
-		--model-name openrouter/free \
-		--provider-url https://openrouter.ai/api/v1 \
+		--model-name openai/gpt-oss-120b \
+		--provider-url https://api.groq.com/openai/v1 \
 		--target mcp_tools_mbpp.py
 
 test:

@@ -17,8 +17,6 @@ dependencies = [
 
 [project.scripts]
 sandbox = "sandbox:main"
-mcp_server = "server:main"
-agent_smith = "main:main"
 
 [build-system]
 requires = ["hatchling"]
