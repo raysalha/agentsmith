@@ -5,12 +5,14 @@ import json
 import os
 import re
 from typing import Any
-from .misc import RED, GREEN, YELLOW, RESET, NO_CODE_BLOCK, MORE_THAN_ONE_CODE_BLOCK, MBPP_MAX_TURN
+from .misc import RED, GREEN, YELLOW, RESET, NO_CODE_BLOCK
+from .misc import MORE_THAN_ONE_CODE_BLOCK, MBPP_MAX_TURN, MAX_TURN_ERROR
 from dotenv import load_dotenv
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 from contextlib import AsyncExitStack
 from .sandbox import Sandbox
-from .data_models import MBPPTaskInput, SWEBenchTaskInput, SandboxConfig, SolutionOutput, StepMetrics
+from .data_models import MBPPTaskInput, SWEBenchTaskInput
+from .data_models import SandboxConfig, SolutionOutput, StepMetrics
 from .system_prompt import build_system_prompt, build_system_prompt_mbpp
 
 load_dotenv()
@@ -40,7 +42,8 @@ def token_counts(response: Any) -> tuple[int, int]:
 def is_retryable_error(error: Exception) -> bool:
     if isinstance(error, (APIConnectionError, APITimeoutError)):
         return True
-    return isinstance(error, APIStatusError) and error.status_code in RETRYABLE_STATUS_CODES
+    return (isinstance(error, APIStatusError) and error.status_code
+            in RETRYABLE_STATUS_CODES)
 
 
 class Orchestrator:
@@ -48,7 +51,7 @@ class Orchestrator:
         self.exit_stack = AsyncExitStack()
         self.model = model
         self.llm = OpenAI(
-            api_key=os.getenv("GROQ_API"),
+            api_key=os.getenv("OPENROUTER_API"),
             base_url=url,
             max_retries=0,
         )
@@ -66,9 +69,13 @@ class Orchestrator:
                     model=self.model,
                     messages=messages,
                 )
-                return response, round((time.perf_counter() - started) * 1_000, 2), retries
-            except (APIConnectionError, APIStatusError, APITimeoutError) as error:
-                if retries >= MAX_REQUEST_RETRIES or not is_retryable_error(error):
+                return (response,
+                        round((time.perf_counter() - started) * 1_000, 2),
+                        retries)
+            except (APIConnectionError, APIStatusError,
+                    APITimeoutError) as error:
+                if (retries >= MAX_REQUEST_RETRIES
+                        or not is_retryable_error(error)):
                     raise
                 retries += 1
                 await asyncio.sleep(min(2 ** (retries - 1), 8))
@@ -101,7 +108,8 @@ class Orchestrator:
                 continue
 
             try:
-                matches = re.findall(r"```python\s*([\s\S]*?)```", "" if message is None else message)
+                matches = re.findall(r"```python\s*([\s\S]*?)```",
+                                     "" if message is None else message)
             except Exception:
                 matches = []
 
@@ -119,13 +127,16 @@ class Orchestrator:
             else:
                 observation = NO_CODE_BLOCK
 
-            messages.append({"role": "assistant", "content": "" if message is None else message})
-            messages.append({"role": "user", "content": "Sandbox output:\n" + observation})
+            messages.append({"role": "assistant",
+                             "content": "" if message is None else message})
+            messages.append({"role": "user",
+                             "content": "Sandbox output:\n" + observation})
             print(f"\n{YELLOW}SANDBOX:\n{observation}{RESET}")
 
-        return RED + "FINAL ANSWER: Unable to complete the task within the tool-turn limit." + RESET
+        return MAX_TURN_ERROR
 
-    async def process_mbpp(self, task: MBPPTaskInput, args: Any) -> SolutionOutput:
+    async def process_mbpp(self, task: MBPPTaskInput,
+                           args: Any) -> SolutionOutput:
         system_prompt = build_system_prompt_mbpp(self.sandbox)
 
         messages = [
@@ -151,7 +162,8 @@ Test Cases from run_tests(): {task.test_list}"""},
             print(f"\nTURN: ({i+1}/{MBPP_MAX_TURN}):")
 
             print("connecting...")
-            response, request_time_ms, retries = await self.create_completion(messages)
+            (response, request_time_ms,
+             retries) = await self.create_completion(messages)
             total_requests += retries + 1
 
             input_tokens, output_tokens = token_counts(response)
@@ -170,14 +182,15 @@ Test Cases from run_tests(): {task.test_list}"""},
                 continue
 
             try:
-                matches = re.findall(r"```python\s*([\s\S]*?)```", "" if message is None else message)
+                matches = re.findall(r"```python\s*([\s\S]*?)```",
+                                     message if message else "")
             except Exception:
                 matches = []
 
             if len(matches) == 1:
                 sandbox_input = matches[0]
                 result = await self.sandbox.run(sandbox_input)
-                if result.final_answer is not None:
+                if result.final_answer:
                     success = True
                 observation = result.output
                 if result.error:
@@ -187,8 +200,10 @@ Test Cases from run_tests(): {task.test_list}"""},
             else:
                 observation = NO_CODE_BLOCK
 
-            messages.append({"role": "assistant", "content": "" if message is None else message})
-            messages.append({"role": "user", "content": "Sandbox output:\n" + observation})
+            messages.append({"role": "assistant",
+                             "content": message if message else ""})
+            messages.append({"role": "user",
+                             "content": "Sandbox output:\n" + observation})
             print(f"\n{YELLOW}SANDBOX:\n{observation}{RESET}")
 
             steps.append(StepMetrics(
@@ -208,13 +223,13 @@ Test Cases from run_tests(): {task.test_list}"""},
 
         error = None
         if success is False:
-            error = RED + "Unable to complete the task within the tool-turn limit." + RESET
+            error = MAX_TURN_ERROR
 
         return SolutionOutput(
             task_id=str(task.task_id),
             benchmark="mbpp",
             success=success,
-            solution=result.final_answer,
+            solution=result.final_answer if result.final_answer else "",
             iterations=len(steps),
             total_requests=total_requests,
             total_input_tokens=sum(step.input_tokens for step in steps),
@@ -225,7 +240,8 @@ Test Cases from run_tests(): {task.test_list}"""},
             error=error
         )
 
-    async def process_swebench(self, task: SWEBenchTaskInput, args: Any) -> SolutionOutput:
+    async def process_swebench(self, task: SWEBenchTaskInput,
+                               args: Any) -> SolutionOutput:
         pass
 
     async def chat_loop(self) -> None:
@@ -286,7 +302,8 @@ async def real_main() -> None:
     client = Orchestrator(args.model_name, args.provider_url, args.target)
 
     try:
-        await client.sandbox.start_mcp_client(task.test_imports, task.test_list)
+        await client.sandbox.start_mcp_client(task.test_imports,
+                                              task.test_list)
 
         api_key = os.getenv("OPENROUTER_API")
         if not api_key:

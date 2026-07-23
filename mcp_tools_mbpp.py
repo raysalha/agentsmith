@@ -16,7 +16,8 @@ mcp = FastMCP("agent_bob")
 
 @mcp.tool()
 def run_tests(code: str) -> str:
-    """Execute generated code against a list of tests and Returns a human-readable report."""
+    """Execute generated code against a list of tests
+    and Returns a human-readable report."""
 
     namespace: dict[Any, Any] = {}
     stdout = io.StringIO()
@@ -76,7 +77,8 @@ def run_tests(code: str) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--transport", choices=["stdio", "streamable-http"], default="stdio")
+    parser.add_argument("--transport", choices=["stdio", "streamable-http"],
+                        default="stdio")
     parser.add_argument("--allowed-directory", action="append", default=[])
     parser.add_argument("--imports", action="append", default=[])
     parser.add_argument("--tests", action="append", default=[])

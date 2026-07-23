@@ -5,7 +5,8 @@ def build_system_prompt(sandbox: Sandbox) -> str:
     tool_lines = []
     for t in sandbox.client.tools:
         params = ", ".join((t.inputSchema or {}).get("properties", {}).keys())
-        tool_lines.append(f"- {t.name}({params}): {t.description or 'no description'}")
+        tool_lines.append(f"- {t.name}({params}): "
+                          f"{t.description or 'no description'}")
     tools_doc = "\n".join(tool_lines)
     imports_doc = ", ".join(sandbox.authorized_imports)
     builtins_doc = ", ".join(sandbox.authorized_builtins)
@@ -233,7 +234,8 @@ def build_system_prompt_mbpp(sandbox: Sandbox) -> str:
     tool_lines = []
     for t in sandbox.client.tools:
         params = ", ".join((t.inputSchema or {}).get("properties", {}).keys())
-        tool_lines.append(f"- {t.name}({params}): {t.description or 'no description'}")
+        tool_lines.append(f"- {t.name}({params}): "
+                          f"{t.description or 'no description'}")
     tools_doc = "\n".join(tool_lines)
 
     return f"""You are Agent Smith, an autonomous Python programming agent.

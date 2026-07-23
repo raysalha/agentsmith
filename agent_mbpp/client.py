@@ -25,7 +25,8 @@ class MCPClient:
                 path = Path(target).resolve()
                 args = ["--directory", str(path.parent), "run", path.name]
                 for directory in allowed_directories or []:
-                    args.extend(["--allowed-directory", str(Path(directory).resolve())])
+                    args.extend(["--allowed-directory",
+                                 str(Path(directory).resolve())])
                 for imp in imports or []:
                     args.extend(["--imports", str(imp)])
                 for test in tests or []:
@@ -40,7 +41,8 @@ class MCPClient:
                     args=[target],
                 )
             else:
-                raise ValueError("Target must be a Python/JS script or an HTTP URL.")
+                msg = "Target must be a Python/JS script or an HTTP URL."
+                raise ValueError(msg)
 
             read, write = await self.exit_stack.enter_async_context(stdio_client(server_params))
 
@@ -51,4 +53,5 @@ class MCPClient:
         # List available tools
         response = await self.session.list_tools()
         self.tools = response.tools
-        print("\nConnected to server with tools:", [tool.name for tool in self.tools])
+        print("\nConnected to server with tools:",
+              [tool.name for tool in self.tools])

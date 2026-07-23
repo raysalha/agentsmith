@@ -1,4 +1,5 @@
-FILES = client.py data_models.py main.py mcp_tools_mbpp.py mcp_tools_swebench.py misc.py sandbox.py system_prompt.py
+FILES = agent_mbpp/*.py mcp_tools_mbpp.py mcp_tools_swebench.py
+FILE = mcp_tools_swebench.py
 MAIN = agent_mbpp
 PY = uv run python3 -m
 
@@ -10,8 +11,8 @@ run:
 	$(PY) $(MAIN) \
 		--task-file mbpp_task.json \
 		--output solution.json \
-		--model-name openai/gpt-oss-120b \
-		--provider-url https://api.groq.com/openai/v1 \
+		--model-name openrouter/free \
+		--provider-url https://openrouter.ai/api/v1 \
 		--target mcp_tools_mbpp.py
 
 test:
@@ -25,8 +26,9 @@ clean:
 	rm -rf .mypy_cache .pytest_cache
 
 lint:
-	$(PY) -m flake8 $(FILES)
-	$(PY) -m mypy $(FILES) --warn-return-any \
+	clear
+	$(PY) flake8 $(FILES)
+	$(PY) mypy $(FILES) --warn-return-any \
 		--warn-unused-ignores \
 		--ignore-missing-imports \
 		--disallow-untyped-defs \

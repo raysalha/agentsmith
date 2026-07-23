@@ -32,14 +32,18 @@ def _resolve_and_check(path: str) -> tuple[str, str | None]:
         abs_path = os.path.realpath(path)
         if _is_allowed(abs_path):
             return abs_path, None
-        return abs_path, f"Error: path '{path}' is outside the allowed directories"
+        return (abs_path,
+                f"Error: path '{path}' is outside the allowed directories")
 
-    candidates = [os.path.realpath(os.path.join(directory, path)) for directory in ALLOWED_DIRECTORIES]
-    candidates = [candidate for candidate in candidates if _is_allowed(candidate)]
+    candidates = [os.path.realpath(os.path.join(directory, path))
+                  for directory in ALLOWED_DIRECTORIES]
+    candidates = [candidate for candidate in candidates
+                  if _is_allowed(candidate)]
     if not candidates:
         return "", f"Error: path '{path}' is outside the allowed directories"
 
-    matches = [candidate for candidate in candidates if os.path.exists(candidate)]
+    matches = [candidate for candidate in candidates
+               if os.path.exists(candidate)]
     if len(matches) == 1:
         return matches[0], None
     if len(matches) > 1:
@@ -151,7 +155,8 @@ def search_code(pattern: str, file_pattern: str = "*.py") -> str:
     res = []
     for directory in ALLOWED_DIRECTORIES:
         for root, dirs, files in os.walk(directory):
-            dirs[:] = [d for d in dirs if d not in (".git", "__pycache__", "node_modules")]
+            dirs[:] = [d for d in dirs
+                       if d not in (".git", "__pycache__", "node_modules")]
             for file in files:
                 if fnmatch.fnmatch(file, file_pattern):
                     filepath = os.path.abspath(os.path.join(root, file))
@@ -179,7 +184,8 @@ def search_function_or_class_definition_in_code(name: str) -> str:
 
     for directory in ALLOWED_DIRECTORIES:
         for root, dirs, files in os.walk(directory):
-            dirs[:] = [d for d in dirs if d not in (".git", "__pycache__", "node_modules")]
+            dirs[:] = [d for d in dirs
+                       if d not in (".git", "__pycache__", "node_modules")]
             for file in files:
                 if fnmatch.fnmatch(file, "*.py"):
                     filepath = os.path.abspath(os.path.join(root, file))
@@ -211,7 +217,8 @@ def find_references(name: str, filepath: str, line: int) -> str:
 
     for directory in ALLOWED_DIRECTORIES:
         for root, dirs, files in os.walk(directory):
-            dirs[:] = [d for d in dirs if d not in (".git", "__pycache__", "node_modules")]
+            dirs[:] = [d for d in dirs
+                       if d not in (".git", "__pycache__", "node_modules")]
             for file in files:
                 if not file.endswith(".py"):
                     continue
@@ -316,14 +323,16 @@ def run_command(command: str, workdir: str = ".") -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--transport", choices=["stdio", "streamable-http"], default="stdio")
+    parser.add_argument("--transport", choices=["stdio", "streamable-http"],
+                        default="stdio")
     parser.add_argument("--allowed-directory", action="append", default=[])
     args = parser.parse_args()
 
     if not args.allowed_directory:
         parser.error("at least one --allowed-directory is required")
     global ALLOWED_DIRECTORIES
-    ALLOWED_DIRECTORIES = tuple(os.path.realpath(path) for path in args.allowed_directory)
+    ALLOWED_DIRECTORIES = tuple(os.path.realpath(path)
+                                for path in args.allowed_directory)
 
     mcp.run(transport=args.transport)
 

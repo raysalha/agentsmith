@@ -6,7 +6,9 @@ from dataclasses import dataclass
 import io
 import json
 import multiprocessing
-from typing import Any, Optional
+from typing import Any, Mapping, Optional, Sequence
+
+from .misc import EXIT_ERROR
 from .client import MCPClient
 from .data_models import SandboxConfig
 
@@ -21,14 +23,17 @@ class Sandbox:
         self.authorized_imports = conf.authorized_imports
         self.allowed_directories = conf.allowed_directories
         self.authorized_builtins = list(AUTHORIZED_BUILTINS)
-        self.max_execution_time_seconds = conf.max_execution_time_seconds
+        self.max_exec_time = conf.max_execution_time_seconds
         self.max_memory_mb = conf.max_memory_mb
         self.server = server
         self.client = MCPClient()
-        self.tool_parameters = {}
+        self.tool_parameters: dict[str, Any] = {}
 
-    async def start_mcp_client(self, imports: list[str] | None = None, tests: list[str] | None = None) -> None:
-        await self.client.connect_to_server(self.server, self.allowed_directories, imports, tests)
+    async def start_mcp_client(self, imports: list[str] | None = None,
+                               tests: list[str] | None = None) -> None:
+        await self.client.connect_to_server(self.server,
+                                            self.allowed_directories,
+                                            imports, tests)
         self.tool_parameters = {
             tool.name: tuple((tool.inputSchema or {}).get("properties", ()))
             for tool in self.client.tools
@@ -36,9 +41,9 @@ class Sandbox:
 
     async def run(self, code: str) -> "SandboxResult":
         """Execute one model turn in a separate process.
-
-        MCP sessions are not safe to share with a child process, so tool calls are
-        sent back to this process over a pipe and executed against the live session.
+        MCP sessions are not safe to share with a child process,
+        so tool calls are sent back to this process over a pipe
+        and executed against the live session.
         """
 
         parent_conn, child_conn = multiprocessing.Pipe()
@@ -62,9 +67,11 @@ class Sandbox:
 
         async def handle_tool_call(tool_name: str, kwargs: dict) -> None:
             try:
-                call_result = await self.client.session.call_tool(tool_name, kwargs)
+                call_result = await self.client.session.call_tool(tool_name,
+                                                                  kwargs)
                 output = "\n".join(
-                    block.text for block in call_result.content if hasattr(block, "text")
+                    block.text for block in call_result.content
+                    if hasattr(block, "text")
                 )
                 parent_conn.send(("tool_result", output))
             except Exception as exc:
@@ -82,11 +89,12 @@ class Sandbox:
                         result.set_result(payload[0])
             except EOFError:
                 if not result.done():
-                    result.set_result({"error": "Sandbox process exited unexpectedly"})
+                    result.set_result({"error": EXIT_ERROR})
 
         loop.add_reader(parent_conn.fileno(), receive_child_message)
         try:
-            worker_result = await asyncio.wait_for(result, timeout=self.max_execution_time_seconds)
+            worker_result = await asyncio.wait_for(result,
+                                                   timeout=self.max_exec_time)
             return SandboxResult(**worker_result)
         except asyncio.TimeoutError:
             return SandboxResult(output="", error="Execution timed out")
@@ -117,7 +125,7 @@ class SandboxResult:
 
 
 def _execute_in_child(
-    conn,
+    conn: Any,
     code: str,
     authorized_imports: list[str],
     authorized_builtins: list[str],
@@ -135,24 +143,29 @@ def _execute_in_child(
 
     stdout_buf = io.StringIO()
 
-    def safe_import(name: str, globals=None, locals=None, fromlist=(), level=0) -> Optional[Any]:
+    def safe_import(name: str, globals: Mapping[str, object] | None = None,
+                    locals: Mapping[str, object] | None = None,
+                    fromlist: Sequence[str] = (),
+                    level: int = 0) -> Optional[Any]:
         if any(
-            name == allowed or (allowed.endswith(".*") and name.startswith(allowed[:-1]))
+            name == allowed or (allowed.endswith(".*")
+                                and name.startswith(allowed[:-1]))
             for allowed in authorized_imports
         ):
             return __import__(name, globals, locals, fromlist, level)
         raise ImportError(f"Import '{name}' is not allowed.")
 
     def make_wrapper(tool_name: str, parameter_names: tuple[str, ...]) -> Any:
-        def wrapper(*args, **kwargs) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             if len(args) > len(parameter_names):
                 raise TypeError(
-                    f"{tool_name}() takes at most {len(parameter_names)} positional arguments "
-                    f"but {len(args)} were given"
+                    f"{tool_name}() takes at most {len(parameter_names)} "
+                    f"positional arguments but {len(args)} were given"
                 )
             for parameter_name, value in zip(parameter_names, args):
                 if parameter_name in kwargs:
-                    raise TypeError(f"{tool_name}() got multiple values for '{parameter_name}'")
+                    raise TypeError(f"{tool_name}() got multiple values "
+                                    f"for '{parameter_name}'")
                 kwargs[parameter_name] = value
             conn.send(("tool_call", tool_name, kwargs))
             message_type, payload = conn.recv()
@@ -165,7 +178,8 @@ def _execute_in_child(
         raise FinalAnswer(answer)
 
     namespace = {
-        "__builtins__": {name: getattr(builtins, name) for name in authorized_builtins}
+        "__builtins__": {name: getattr(builtins, name)
+                         for name in authorized_builtins}
         | {"__import__": safe_import},
         "final_answer": final_answer,
     }
@@ -179,21 +193,26 @@ def _execute_in_child(
             exec(code, namespace)
         conn.send(("result", {"output": stdout_buf.getvalue()}))
     except FinalAnswer as exc:
-        conn.send(("result", {"output": stdout_buf.getvalue(), "final_answer": exc.answer}))
+        conn.send(("result", {"output": stdout_buf.getvalue(),
+                              "final_answer": exc.answer}))
     except (KeyboardInterrupt, SystemExit):
         raise
     except MemoryError:
-        conn.send(("result", {"output": stdout_buf.getvalue(), "error": "Sandbox exceeded memory limit."}))
+        conn.send(("result", {"output": stdout_buf.getvalue(),
+                              "error": "Sandbox exceeded memory limit."}))
     except Exception as exc:
-        conn.send(("result", {"output": stdout_buf.getvalue(), "error": f"Sandbox execution failed: {exc}"}))
+        conn.send(("result", {"output": stdout_buf.getvalue(),
+                              "error": f"Sandbox execution failed: {exc}"}))
     finally:
         conn.close()
 
 
 async def _async_main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mcp-stdio", default=None, help='e.g. "python mcp_tools_mbpp.py"')
-    ap.add_argument("--mcp-server", default=None, help="URL for streamable HTTP MCP server")
+    ap.add_argument("--mcp-stdio", default=None,
+                    help='e.g. "python mcp_tools_mbpp.py"')
+    ap.add_argument("--mcp-server", default=None,
+                    help="URL for streamable HTTP MCP server")
     ap.add_argument("config_file", nargs="?", default=None)
     args = ap.parse_args()
 

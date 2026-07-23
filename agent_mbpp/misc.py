@@ -41,3 +41,7 @@ Thought:
 ```python
 # python code only
 ```"""
+
+MAX_TURN_ERROR = RED + "FINAL ANSWER: Unable to complete the task within the tool-turn limit." + RESET
+
+EXIT_ERROR = "Sandbox process exited unexpectedly"
