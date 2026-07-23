@@ -12,6 +12,7 @@ class MCPClient:
 
     async def connect_to_server(
         self, target: str,
+        server_type: str,
         allowed_directories: list[str] | None = None,
         imports: list[str] | None = None,
         tests: list[str] | None = None,
@@ -21,28 +22,22 @@ class MCPClient:
                 streamable_http_client(target)
             )
         else:
-            if target.endswith(".py"):
-                path = Path(target).resolve()
-                args = ["--directory", str(path.parent), "run", path.name]
-                for directory in allowed_directories or []:
-                    args.extend(["--allowed-directory",
-                                 str(Path(directory).resolve())])
-                for imp in imports or []:
-                    args.extend(["--imports", str(imp)])
-                for test in tests or []:
-                    args.extend(["--tests", str(test)])
-                server_params = StdioServerParameters(
-                    command="uv",
-                    args=args,
-                )
-            elif target.endswith(".js"):
-                server_params = StdioServerParameters(
-                    command="node",
-                    args=[target],
-                )
-            else:
-                msg = "Target must be a Python/JS script or an HTTP URL."
-                raise ValueError(msg)
+            path = Path(target).resolve()
+            args = ["--directory", str(path.parent), "run", path.name]
+            for directory in allowed_directories or []:
+                args.extend(["--allowed-directory",
+                             str(Path(directory).resolve())])
+            for imp in imports or []:
+                args.extend(["--imports", str(imp)])
+            for test in tests or []:
+                args.extend(["--tests", str(test)])
+        if server_type == "swebench":
+            pass
+        else:
+            server_params = StdioServerParameters(
+                command="uv",
+                args=args,
+            )
 
             read, write = await self.exit_stack.enter_async_context(stdio_client(server_params))
 

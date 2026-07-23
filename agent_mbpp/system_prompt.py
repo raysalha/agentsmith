@@ -366,7 +366,7 @@ print(result)
 ```
 
 ==============================
-PROTOCOL ERRORS
+SANDBOX ERRORS
 ==============================
 
 If the sandbox reports:

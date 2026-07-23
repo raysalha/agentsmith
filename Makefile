@@ -9,11 +9,11 @@ install:
 run:
 	clear
 	$(PY) $(MAIN) \
-		--task-file mbpp_task.json \
+		--task-file swebench_task.json \
 		--output solution.json \
 		--model-name openrouter/free \
 		--provider-url https://openrouter.ai/api/v1 \
-		--target mcp_tools_mbpp.py
+		--target mcp_tools_swebench.py
 
 test:
 	uv run pytest

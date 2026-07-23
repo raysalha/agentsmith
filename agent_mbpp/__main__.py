@@ -1,8 +1,11 @@
 import argparse
 import asyncio
+import io
+import tarfile
 import time
 import json
 import os
+import docker
 import re
 from typing import Any
 from .misc import RED, GREEN, YELLOW, RESET, NO_CODE_BLOCK
@@ -36,6 +39,31 @@ def token_counts(response: Any) -> tuple[int, int]:
     return (
         getattr(usage, "prompt_tokens", 0) or 0,
         getattr(usage, "completion_tokens", 0) or 0,
+    )
+
+
+def copy_to_container(container, src_path, dest_path):
+    data = io.BytesIO()
+
+    filename = os.path.basename(dest_path)
+
+    with tarfile.open(fileobj=data, mode="w") as tar:
+        info = tar.gettarinfo(src_path, arcname=filename)
+
+        # Avoid host UID/GID leaking into container
+        info.uid = 0
+        info.gid = 0
+        info.uname = "root"
+        info.gname = "root"
+
+        with open(src_path, "rb") as f:
+            tar.addfile(info, f)
+
+    data.seek(0)
+
+    container.put_archive(
+        path=os.path.dirname(dest_path),
+        data=data.read()
     )
 
 
@@ -244,6 +272,77 @@ Test Cases from run_tests(): {task.test_list}"""},
                                args: Any) -> SolutionOutput:
         pass
 
+    async def setup_docker(self, task: SWEBenchTaskInput, args: Any) -> tuple[Any, Any]:
+        client = docker.from_env()
+
+        print("downloading image...")
+        image = client.images.pull(task.docker_image)
+
+        transport = "stdio"
+
+        print("creating...")
+        container = client.containers.create(
+            image=image,
+            name="swebench_container",
+            command="sleep infinity",
+            ports={
+                "8000/tcp": 8000
+            } if transport == "streamable-http" else None,
+        )
+
+        print("starting...")
+        container.start()
+
+        copy_to_container(
+            container,
+            "mcp_tools_swebench.py",
+            "/mcp_tools_swebench.py"
+        )
+
+        print("installing dependencies...")
+        container.exec_run(
+            "pip install dotenv 'mcp[cli]'"
+        )
+
+        if transport == "streamable-http":
+            print("starting HTTP server...")
+
+            container.exec_run(
+                "python3 /mcp_tools_swebench.py "
+                "--transport streamable-http "
+                "--allowed-directory /testbed",
+                detach=True
+            )
+
+            args.target = "http://localhost:8000/mcp"
+
+            return (container, None)
+
+        elif transport == "stdio":
+            print("starting stdio server...")
+
+            exec_id = client.api.exec_create(
+                container.id,
+                "python3 /mcp_tools_swebench.py "
+                "--transport stdio "
+                "--allowed-directory /testbed",
+                stdin=True,
+                stdout=True,
+                stderr=True,
+                tty=False,
+            )
+
+            socket = client.api.exec_start(
+                exec_id,
+                stream=True,
+                socket=True
+            )
+
+            return (container, socket)
+
+
+
+
     async def chat_loop(self) -> None:
         """Run an interactive chat loop"""
         print("\nMCP Client Started!")
@@ -302,8 +401,11 @@ async def real_main() -> None:
     client = Orchestrator(args.model_name, args.provider_url, args.target)
 
     try:
-        await client.sandbox.start_mcp_client(task.test_imports,
-                                              task.test_list)
+        if isinstance(task, MBPPTaskInput):
+            await client.sandbox.start_mcp_client("mbpp", task.test_imports, task.test_list)
+        elif isinstance(task, SWEBenchTaskInput):
+            await client.setup_docker(task, args)
+            await client.sandbox.start_mcp_client("swebench")
 
         api_key = os.getenv("OPENROUTER_API")
         if not api_key:
