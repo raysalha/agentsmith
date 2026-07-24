@@ -1,5 +1,6 @@
 # Python-generated files
 __pycache__/
+.mypy_cache/
 *.py[oc]
 build/
 dist/
@@ -12,3 +13,4 @@ venv/
 .env
 
 moulinette/
+.docker/

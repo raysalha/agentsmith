@@ -1,5 +1,6 @@
-FILES = agent_mbpp/*.py mcp_tools_mbpp.py mcp_tools_swebench.py
-FILE = mcp_tools_swebench.py
+FILES = mcp_tools_mbpp.py mcp_tools_swebench.py \
+		agent_swebench/*.py \
+		agent_mbpp/*.py
 
 PY = uv run python3 -m
 

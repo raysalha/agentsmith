@@ -1,11 +1,8 @@
 import argparse
 import asyncio
-import io
-import tarfile
 import time
 import json
 import os
-import subprocess
 import re
 from typing import Any
 from helper.misc import RED, GREEN, YELLOW, RESET, NO_CODE_BLOCK
@@ -20,7 +17,7 @@ from .system_prompt import build_system_prompt_mbpp
 
 load_dotenv()
 
-API_KEY=os.getenv("OPENROUTER_API")
+API_KEY = os.getenv("OPENROUTER_API")
 
 SAFETY_STATUS_RESPONSE = re.compile(
     r"\s*user\s+safety\s*:\s*\w+\s*response\s+safety\s*:\s*\w+\s*",
@@ -41,31 +38,6 @@ def token_counts(response: Any) -> tuple[int, int]:
     return (
         getattr(usage, "prompt_tokens", 0) or 0,
         getattr(usage, "completion_tokens", 0) or 0,
-    )
-
-
-def copy_to_container(container, src_path, dest_path):
-    data = io.BytesIO()
-
-    filename = os.path.basename(dest_path)
-
-    with tarfile.open(fileobj=data, mode="w") as tar:
-        info = tar.gettarinfo(src_path, arcname=filename)
-
-        # Avoid host UID/GID leaking into container
-        info.uid = 0
-        info.gid = 0
-        info.uname = "root"
-        info.gname = "root"
-
-        with open(src_path, "rb") as f:
-            tar.addfile(info, f)
-
-    data.seek(0)
-
-    container.put_archive(
-        path=os.path.dirname(dest_path),
-        data=data.read()
     )
 
 
@@ -246,9 +218,6 @@ async def real_main() -> None:
                 data = json.load(f)
             task = MBPPTaskInput.model_validate(data)
         except Exception:
-            task = None
-
-        if not task:
             print("ERROR: Invalid task JSON")
             return
 
@@ -256,8 +225,6 @@ async def real_main() -> None:
     if not api_key:
         print("Invalid or no API key")
         return
-
-    client = None
 
     try:
         client = Orchestrator(args.model_name, args.provider_url, args.target, sandbox_conf)

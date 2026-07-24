@@ -1,15 +1,13 @@
 import argparse
 import asyncio
-import io
-import tarfile
 import time
 import json
 import os
 import subprocess
 import re
 from typing import Any
-from helper.misc import RED, GREEN, YELLOW, RESET, NO_CODE_BLOCK, SWEBENCH_MAX_TURN
-from helper.misc import MORE_THAN_ONE_CODE_BLOCK, MAX_TURN_ERROR
+from helper.misc import RED, GREEN, YELLOW, RESET, NO_CODE_BLOCK
+from helper.misc import MORE_THAN_ONE_CODE_BLOCK, SWEBENCH_MAX_TURN
 from dotenv import load_dotenv
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 from contextlib import AsyncExitStack
@@ -20,7 +18,7 @@ from .system_prompt import build_system_prompt
 
 load_dotenv()
 
-API_KEY=os.getenv("OPENROUTER_API")
+API_KEY = os.getenv("OPENROUTER_API")
 
 SAFETY_STATUS_RESPONSE = re.compile(
     r"\s*user\s+safety\s*:\s*\w+\s*response\s+safety\s*:\s*\w+\s*",
@@ -44,36 +42,12 @@ def token_counts(response: Any) -> tuple[int, int]:
     )
 
 
-def copy_to_container(container, src_path, dest_path):
-    data = io.BytesIO()
-
-    filename = os.path.basename(dest_path)
-
-    with tarfile.open(fileobj=data, mode="w") as tar:
-        info = tar.gettarinfo(src_path, arcname=filename)
-
-        # Avoid host UID/GID leaking into container
-        info.uid = 0
-        info.gid = 0
-        info.uname = "root"
-        info.gname = "root"
-
-        with open(src_path, "rb") as f:
-            tar.addfile(info, f)
-
-    data.seek(0)
-
-    container.put_archive(
-        path=os.path.dirname(dest_path),
-        data=data.read()
-    )
-
-
 def is_retryable_error(error: Exception) -> bool:
     if isinstance(error, (APIConnectionError, APITimeoutError)):
         return True
     return (isinstance(error, APIStatusError) and error.status_code
             in RETRYABLE_STATUS_CODES)
+
 
 def setup_docker(task: SWEBenchTaskInput, repo_root: str) -> tuple[Any, Any]:
     image = task.docker_image
@@ -194,7 +168,7 @@ class Orchestrator:
                 await asyncio.sleep(min(2 ** (retries - 1), 8))
 
     async def process_swe(self, task: SWEBenchTaskInput,
-                               args: Any) -> SolutionOutput:
+                          args: Any) -> SolutionOutput:
         system_prompt = build_system_prompt(self.sandbox)
 
         messages = [
@@ -301,26 +275,6 @@ When the evaluation passes, immediately return the diff from `get_patch()` throu
             error=error,
         )
 
-    async def chat_loop(self) -> None:
-        """Run an interactive chat loop"""
-        print("\nMCP Client Started!")
-        print("Type your queries or 'quit' to exit.")
-
-        while True:
-            try:
-                query = input("\nQuery: ").strip()
-            except (EOFError, KeyboardInterrupt):
-                break
-
-            if query.lower() == "quit":
-                break
-
-            try:
-                response = await self.process_query(query)
-                print(f"\n{response}")
-            except Exception as e:
-                print(f"\nError: {str(e)}")
-
     async def cleanup(self) -> None:
         """Clean up resources"""
         container_name = os.getenv("AGENT_DOCKER_CONTAINER")
@@ -360,9 +314,6 @@ async def real_main() -> None:
                 data = json.load(f)
             task = SWEBenchTaskInput.model_validate(data)
         except Exception:
-            task = None
-
-        if not task:
             print("ERROR: Invalid task JSON")
             return
 
@@ -370,8 +321,6 @@ async def real_main() -> None:
     if not api_key:
         print("Invalid or no API key")
         return
-
-    client = None
 
     try:
         repo_root = os.path.abspath(os.getcwd())
