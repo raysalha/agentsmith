@@ -12,7 +12,6 @@ class MCPClient:
 
     async def connect_to_server(
         self, target: str,
-        server_type: str,
         allowed_directories: list[str] | None = None,
         imports: list[str] | None = None,
         tests: list[str] | None = None,
