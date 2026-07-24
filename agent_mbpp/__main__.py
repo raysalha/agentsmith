@@ -134,17 +134,15 @@ Test Cases from run_tests(): {task.test_list}"""},
             except Exception:
                 matches = []
 
-            if len(matches) == 1:
-                sandbox_input = matches[0]
+            for match in matches:
+                sandbox_input = match
                 result = await self.sandbox.run(sandbox_input)
                 if result.final_answer:
                     success = True
                 observation = result.output
                 if result.error:
                     observation += f"{RED}ERROR: {result.error}{RESET}"
-            elif len(matches) > 0:
-                observation = MORE_THAN_ONE_CODE_BLOCK
-            else:
+            if len(matches) < 1:
                 observation = NO_CODE_BLOCK
 
             messages.append({"role": "assistant",

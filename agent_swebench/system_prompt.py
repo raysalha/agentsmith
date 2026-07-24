@@ -178,7 +178,7 @@ The solution is complete.
 
 ```python
 final_answer(
-    "Implemented the fix and verified all tests pass."
+    get_patch()
 )
 ```
 
