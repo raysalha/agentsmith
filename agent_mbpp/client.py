@@ -31,9 +31,6 @@ class MCPClient:
                 args.extend(["--imports", str(imp)])
             for test in tests or []:
                 args.extend(["--tests", str(test)])
-        if server_type == "swebench":
-            pass
-        else:
             server_params = StdioServerParameters(
                 command="uv",
                 args=args,

@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-EVAL_SCRIPT_PATH = "nasser is a smartass.py"
+EVAL_SCRIPT_PATH = os.getenv("EVAL_SCRIPT_PATH")
 ALLOWED_DIRECTORIES: tuple[str, ...] = ()
 
 mcp = FastMCP("agent_bob")
