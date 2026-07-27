@@ -7,7 +7,7 @@ import subprocess
 import re
 from typing import Any
 from helper.misc import RED, GREEN, YELLOW, RESET, NO_CODE_BLOCK
-from helper.misc import MORE_THAN_ONE_CODE_BLOCK, SWEBENCH_MAX_TURN
+from helper.misc import SWEBENCH_MAX_TURN
 from dotenv import load_dotenv
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 from contextlib import AsyncExitStack
@@ -134,7 +134,8 @@ def setup_docker(task: SWEBenchTaskInput, repo_root: str) -> tuple[Any, Any]:
 
 
 class Orchestrator:
-    def __init__(self, model: str, url: str, target: str, sandbox_conf: SandboxConfig):
+    def __init__(self, model: str, url: str, target: str,
+                 sandbox_conf: SandboxConfig):
         self.exit_stack = AsyncExitStack()
         self.model = model
         self.llm = OpenAI(
@@ -145,7 +146,10 @@ class Orchestrator:
 
         self.sandbox = Sandbox(sandbox_conf, target)
 
-    async def create_completion(self, messages: list[dict[str, str]]) -> tuple[Any, float, int]:
+    async def create_completion(self,
+                                messages: list[dict[str, str]]) -> tuple[Any,
+                                                                         float,
+                                                                         int]:
         """Create a completion, retrying transient provider failures."""
         started = time.perf_counter()
         retries = 0
@@ -218,7 +222,8 @@ When the evaluation passes, immediately return the diff from `get_patch()` throu
                 continue
 
             try:
-                matches = re.findall(r"```python\s*([\s\S]*?)```", "" if message is None else message)
+                matches = re.findall(r"```python\s*([\s\S]*?)```",
+                                     "" if message is None else message)
             except Exception:
                 matches = []
 
@@ -233,8 +238,10 @@ When the evaluation passes, immediately return the diff from `get_patch()` throu
             if len(matches) < 1:
                 observation = NO_CODE_BLOCK
 
-            messages.append({"role": "assistant", "content": "" if message is None else message})
-            messages.append({"role": "user", "content": "Sandbox output:\n" + observation})
+            messages.append({"role": "assistant",
+                             "content": "" if message is None else message})
+            messages.append({"role": "user",
+                             "content": "Sandbox output:\n" + observation})
             print(f"\n{YELLOW}SANDBOX:\n{observation}{RESET}")
 
             steps.append(StepMetrics(
@@ -254,7 +261,8 @@ When the evaluation passes, immediately return the diff from `get_patch()` throu
 
         error = None
         if success is False:
-            error = RED + "Unable to complete the task within the tool-turn limit." + RESET
+            msg = "Unable to complete the task within the tool-turn limit."
+            error = RED + msg + RESET
 
         solution = result.final_answer if result and result.final_answer else ""
 
@@ -324,7 +332,8 @@ async def real_main() -> None:
         repo_root = os.path.abspath(os.getcwd())
         container_name, volume_dir = setup_docker(task, repo_root)
         sandbox_conf.allowed_directories = [volume_dir]
-        client = Orchestrator(args.model_name, args.provider_url, args.target, sandbox_conf)
+        client = Orchestrator(args.model_name, args.provider_url,
+                              args.target, sandbox_conf)
         with open("eval.sh", "w") as f:
             f.write(task.eval_script)
         await client.sandbox.start_mcp_client()

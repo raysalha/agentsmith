@@ -6,7 +6,7 @@ import os
 import re
 from typing import Any
 from helper.misc import RED, GREEN, YELLOW, RESET, NO_CODE_BLOCK
-from helper.misc import MORE_THAN_ONE_CODE_BLOCK, MBPP_MAX_TURN, MAX_TURN_ERROR
+from helper.misc import MBPP_MAX_TURN, MAX_TURN_ERROR
 from dotenv import load_dotenv
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 from contextlib import AsyncExitStack
@@ -49,7 +49,8 @@ def is_retryable_error(error: Exception) -> bool:
 
 
 class Orchestrator:
-    def __init__(self, model: str, url: str, target: str, sandbox_conf: SandboxConfig):
+    def __init__(self, model: str, url: str, target: str,
+                 sandbox_conf: SandboxConfig):
         self.exit_stack = AsyncExitStack()
         self.model = model
         self.llm = OpenAI(
@@ -60,7 +61,10 @@ class Orchestrator:
 
         self.sandbox = Sandbox(sandbox_conf, target)
 
-    async def create_completion(self, messages: list[dict[str, str]]) -> tuple[Any, float, int]:
+    async def create_completion(self,
+                                messages: list[dict[str, str]]) -> tuple[Any,
+                                                                         float,
+                                                                         int]:
         """Create a completion, retrying transient provider failures."""
         started = time.perf_counter()
         retries = 0
@@ -225,8 +229,10 @@ async def real_main() -> None:
         return
 
     try:
-        client = Orchestrator(args.model_name, args.provider_url, args.target, sandbox_conf)
-        await client.sandbox.start_mcp_client(task.test_imports, task.test_list)
+        client = Orchestrator(args.model_name, args.provider_url,
+                              args.target, sandbox_conf)
+        await client.sandbox.start_mcp_client(task.test_imports,
+                                              task.test_list)
         result = await client.process_mbpp(task, args)
         print(f"{GREEN}FINAL ANSWER:\n{result.solution}{RESET}\n")
         solution = result.model_dump_json(indent=4)

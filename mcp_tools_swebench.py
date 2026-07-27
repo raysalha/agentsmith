@@ -22,7 +22,8 @@ def _is_allowed(path: str) -> bool:
 
 
 def _resolve_and_check(path: str) -> tuple[str, str | None]:
-    """Resolve a path within the allowlist, rejecting ambiguous relative paths."""
+    """Resolve a path within the allowlist,
+       rejecting ambiguous relative paths."""
     if not ALLOWED_DIRECTORIES:
         return "", "Error: no allowed directories are configured"
     if not path:
@@ -159,12 +160,12 @@ def search_code(pattern: str, file_pattern: str = "*.py") -> str:
                        if d not in (".git", "__pycache__", "node_modules")]
             for file in files:
                 if fnmatch.fnmatch(file, file_pattern):
-                    filepath = os.path.abspath(os.path.join(root, file))
+                    f_path = os.path.abspath(os.path.join(root, file))
                     try:
-                        with open(filepath, "r", encoding="utf-8") as f:
+                        with open(f_path, "r", encoding="utf-8") as f:
                             for i, line in enumerate(f, start=1):
                                 if pattern in line:
-                                    res.append(f"{filepath}:{i} {line.rstrip()}")
+                                    res.append(f"{f_path}:{i} {line.rstrip()}")
                     except (UnicodeDecodeError, PermissionError, OSError):
                         continue
 
@@ -188,12 +189,12 @@ def search_function_or_class_definition_in_code(name: str) -> str:
                        if d not in (".git", "__pycache__", "node_modules")]
             for file in files:
                 if fnmatch.fnmatch(file, "*.py"):
-                    filepath = os.path.abspath(os.path.join(root, file))
+                    f_path = os.path.abspath(os.path.join(root, file))
                     try:
-                        with open(filepath, "r", encoding="utf-8") as f:
+                        with open(f_path, "r", encoding="utf-8") as f:
                             for i, line in enumerate(f, start=1):
                                 if pattern.search(line):
-                                    res.append(f"{filepath}:{i} {line.rstrip()}")
+                                    res.append(f"{f_path}:{i} {line.rstrip()}")
                     except (UnicodeDecodeError, PermissionError, OSError):
                         continue
 
