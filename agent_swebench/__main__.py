@@ -51,8 +51,8 @@ def is_retryable_error(error: Exception) -> bool:
 
 def setup_docker(task: SWEBenchTaskInput, repo_root: str) -> tuple[Any, Any]:
     image = task.docker_image
-    checkout_dir = os.path.join(repo_root, ".docker", task.instance_id)
-    os.makedirs(checkout_dir, exist_ok=True)
+    volume_dir = os.path.join(repo_root, ".docker", task.instance_id)
+    os.makedirs(volume_dir, exist_ok=True)
 
     print("Downloading image...")
     subprocess.run(
@@ -61,18 +61,18 @@ def setup_docker(task: SWEBenchTaskInput, repo_root: str) -> tuple[Any, Any]:
         timeout=1200,
     )
 
-    temp_container_name = f"{task.instance_id.lower()}-temp-{os.getpid()}"
+    temp_name = f"{task.instance_id.lower()}-temp-{os.getpid()}"
     container_name = f"{task.instance_id.lower()}-{os.getpid()}"
 
     print("Creating temp container...")
     subprocess.run(
-        ["docker", "rm", "-f", temp_container_name],
+        ["docker", "rm", "-f", temp_name],
         capture_output=True,
         text=True,
         check=False,
     )
     create_result = subprocess.run(
-        ["docker", "create", "--name", temp_container_name, image],
+        ["docker", "create", "--name", temp_name, image],
         capture_output=True,
         text=True,
         timeout=120,
@@ -86,20 +86,21 @@ def setup_docker(task: SWEBenchTaskInput, repo_root: str) -> tuple[Any, Any]:
 
     print("Copying content to testbed...")
     copy_result = subprocess.run(
-        ["docker", "cp", f"{temp_container_name}:/testbed/.", checkout_dir],
+        ["docker", "cp", f"{temp_name}:/testbed/.", volume_dir],
         capture_output=True,
         text=True,
         timeout=120,
     )
     if copy_result.returncode != 0:
         raise RuntimeError(
-            f"Failed to copy /testbed from container '{temp_container_name}' to '{checkout_dir}':\n"
+            f"Failed to copy /testbed from container "
+            f"'{temp_name}' to '{volume_dir}':\n"
             f"stdout: {copy_result.stdout}\n"
             f"stderr: {copy_result.stderr}"
         )
 
     subprocess.run(
-        ["docker", "rm", "-f", temp_container_name],
+        ["docker", "rm", "-f", temp_name],
         capture_output=True,
         text=True,
         check=False,
@@ -115,7 +116,7 @@ def setup_docker(task: SWEBenchTaskInput, repo_root: str) -> tuple[Any, Any]:
     run_result = subprocess.run(
         [
             "docker", "run", "-d", "--name", container_name,
-            "-v", f"{checkout_dir}:/testbed", "-w", "/testbed",
+            "-v", f"{volume_dir}:/testbed", "-w", "/testbed",
             image, "sleep", "infinity",
         ],
         capture_output=True,
@@ -124,19 +125,21 @@ def setup_docker(task: SWEBenchTaskInput, repo_root: str) -> tuple[Any, Any]:
     )
     if run_result.returncode != 0:
         raise RuntimeError(
-            f"Failed to create docker container '{container_name}' from '{image}':\n"
+            f"Failed to create docker container "
+            f"'{container_name}' from '{image}':\n"
             f"stdout: {run_result.stdout}\n"
             f"stderr: {run_result.stderr}"
         )
 
     print("Docker setup completed")
-    return container_name, checkout_dir
+    return container_name, volume_dir
 
 
 class Orchestrator:
     def __init__(self, model: str, url: str, target: str,
                  sandbox_conf: SandboxConfig):
         self.exit_stack = AsyncExitStack()
+        self.sandbox = Sandbox(sandbox_conf, target)
         self.model = model
         self.llm = OpenAI(
             api_key=API_KEY,
@@ -144,12 +147,8 @@ class Orchestrator:
             max_retries=0,
         )
 
-        self.sandbox = Sandbox(sandbox_conf, target)
-
-    async def create_completion(self,
-                                messages: list[dict[str, str]]) -> tuple[Any,
-                                                                         float,
-                                                                         int]:
+    async def create_completion(self, messages: list[dict[str, str]]
+                                ) -> tuple[Any, float, int]:
         """Create a completion, retrying transient provider failures."""
         started = time.perf_counter()
         retries = 0
@@ -177,18 +176,19 @@ class Orchestrator:
 
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"""This is a SWE-bench task.
-Instance ID: {task.instance_id}
-Repository: {task.repo or 'unknown'}
-Problem statement:
-{task.problem_statement}
-
-Hints:
-{task.hints_text or 'None'}
-
-You must inspect the repository, implement the fix, and verify it using the evaluation script exposed by the MCP tools.
-When the evaluation passes, immediately return the diff from `get_patch()` through `final_answer(...)`.
-"""},
+            {"role": "user", "content": (
+                "This is a SWE-bench task.\n"
+                f"Instance ID: {task.instance_id}\n"
+                "Repository: {task.repo or 'unknown'}\n"
+                "Problem statement:\n"
+                f"{task.problem_statement}\n\n"
+                "Hints:\n"
+                f"{task.hints_text or 'None'}\n\n"
+                "You must inspect the repository, implement the fix, and "
+                "verify it using the evaluation script exposed by the MCP tools.\n"
+                "When the evaluation passes, immediately return the diff from "
+                "`get_patch()` through `final_answer(...)`.\n"
+            )},
         ]
 
         steps = []
@@ -203,7 +203,7 @@ When the evaluation passes, immediately return the diff from `get_patch()` throu
         for i in range(SWEBENCH_MAX_TURN):
             print(f"\nTURN: ({i+1}/{SWEBENCH_MAX_TURN}):")
 
-            response, request_time_ms, retries = await self.create_completion(messages)
+            response, time_ms, retries = await self.create_completion(messages)
             total_requests += retries + 1
 
             input_tokens, output_tokens = token_counts(response)
@@ -223,7 +223,7 @@ When the evaluation passes, immediately return the diff from `get_patch()` throu
 
             try:
                 matches = re.findall(r"```python\s*([\s\S]*?)```",
-                                     "" if message is None else message)
+                                     message if message else "")
             except Exception:
                 matches = []
 
@@ -238,17 +238,17 @@ When the evaluation passes, immediately return the diff from `get_patch()` throu
             if len(matches) < 1:
                 observation = NO_CODE_BLOCK
 
-            messages.append({"role": "assistant",
-                             "content": "" if message is None else message})
-            messages.append({"role": "user",
-                             "content": "Sandbox output:\n" + observation})
+            messages.append({"role": "assistant", "content":
+                             message if message else ""})
+            messages.append({"role": "user", "content":
+                             "Sandbox output:\n" + observation})
             print(f"\n{YELLOW}SANDBOX:\n{observation}{RESET}")
 
             steps.append(StepMetrics(
                 step=i + 1,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
-                request_time_ms=request_time_ms,
+                request_time_ms=time_ms,
                 api_url=args.provider_url,
                 model_name=args.model_name,
                 llm_output=message if message else "",
@@ -264,13 +264,13 @@ When the evaluation passes, immediately return the diff from `get_patch()` throu
             msg = "Unable to complete the task within the tool-turn limit."
             error = RED + msg + RESET
 
-        solution = result.final_answer if result and result.final_answer else ""
+        solutio = result.final_answer if result and result.final_answer else ""
 
         return SolutionOutput(
             task_id=task.instance_id,
             benchmark="swebench",
             success=success,
-            solution=solution,
+            solution=solutio,
             iterations=len(steps),
             total_requests=total_requests,
             total_input_tokens=sum(step.input_tokens for step in steps),
@@ -332,17 +332,29 @@ async def real_main() -> None:
         repo_root = os.path.abspath(os.getcwd())
         container_name, volume_dir = setup_docker(task, repo_root)
         sandbox_conf.allowed_directories = [volume_dir]
-        client = Orchestrator(args.model_name, args.provider_url,
-                              args.target, sandbox_conf)
+        client = Orchestrator(
+            args.model_name,
+            args.provider_url,
+            args.target,
+            sandbox_conf
+        )
         with open("eval.sh", "w") as f:
             f.write(task.eval_script)
-        await client.sandbox.start_mcp_client()
+        await client.sandbox.init_mcp_client()
         os.environ["AGENT_DOCKER_CONTAINER"] = container_name
         os.environ["EVAL_SCRIPT_PATH"] = os.path.abspath("eval.sh")
         result = await client.process_swe(task, args)
         print(f"{GREEN}FINAL ANSWER:\n{result.solution}{RESET}\n")
         solution = result.model_dump_json(indent=4)
-        print(solution)
+        print(f"task_id: {result.task_id}")
+        print(f"benchmark: {result.benchmark}")
+        print(f"success: {result.success}")
+        print(f"iterations: {result.iterations}")
+        print(f"total_requests: {result.total_requests}")
+        print(f"total_input_tokens: {result.total_input_tokens}")
+        print(f"total_output_tokens: {result.total_output_tokens}")
+        print(f"total_time_seconds: {result.total_time_seconds}")
+        print(f"timestamp: {result.timestamp}")
         with open(args.output, "w") as f:
             f.write(solution)
     finally:

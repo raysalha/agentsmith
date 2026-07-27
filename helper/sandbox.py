@@ -29,8 +29,8 @@ class Sandbox:
         self.client = MCPClient()
         self.tool_parameters: dict[str, Any] = {}
 
-    async def start_mcp_client(self, imports: list[str] | None = None,
-                               tests: list[str] | None = None) -> None:
+    async def init_mcp_client(self, imports: list[str] | None = None,
+                              tests: list[str] | None = None) -> None:
         await self.client.connect_to_server(self.server,
                                             self.allowed_directories,
                                             imports, tests)
@@ -236,7 +236,7 @@ async def _async_main() -> None:
     full_query = ""
     try:
         if args.mcp_stdio is not None or args.mcp_server is not None:
-            await sandbox.start_mcp_client()
+            await sandbox.init_mcp_client()
 
         print("Type your queries or 'quit' to exit.")
 

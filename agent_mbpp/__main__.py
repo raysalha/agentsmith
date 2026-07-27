@@ -52,6 +52,7 @@ class Orchestrator:
     def __init__(self, model: str, url: str, target: str,
                  sandbox_conf: SandboxConfig):
         self.exit_stack = AsyncExitStack()
+        self.sandbox = Sandbox(sandbox_conf, target)
         self.model = model
         self.llm = OpenAI(
             api_key=API_KEY,
@@ -59,12 +60,8 @@ class Orchestrator:
             max_retries=0,
         )
 
-        self.sandbox = Sandbox(sandbox_conf, target)
-
-    async def create_completion(self,
-                                messages: list[dict[str, str]]) -> tuple[Any,
-                                                                         float,
-                                                                         int]:
+    async def create_completion(self, messages: list[dict[str, str]]
+                                ) -> tuple[Any, float, int]:
         """Create a completion, retrying transient provider failures."""
         started = time.perf_counter()
         retries = 0
@@ -86,20 +83,21 @@ class Orchestrator:
                 retries += 1
                 await asyncio.sleep(min(2 ** (retries - 1), 8))
 
-    async def process_mbpp(self, task: MBPPTaskInput,
-                           args: Any) -> SolutionOutput:
+    async def process_mbpp(self, task: MBPPTaskInput, args: Any
+                           ) -> SolutionOutput:
         system_prompt = build_system_prompt_mbpp(self.sandbox)
 
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"""This is an MBPP task.
-Write the requested Python function using the exact function signature.
-Before calling final_answer(), you MUST verify your solution by calling: run_tests(code)
-Only call final_answer(code) after all tests pass.
-
-Task: {task.task_definition}
-Function Definition: {task.function_definition}
-Test Cases from run_tests(): {task.test_list}"""},
+            {"role": "user", "content": (
+                "This is an MBPP task.\n"
+                "Write the requested Python function using the exact function signature.\n"
+                "Before calling final_answer(), you MUST verify your solution by calling: run_tests(code)\n"
+                "Only call final_answer(code) after all tests pass.\n\n"
+                f"Task: {task.task_definition}\n"
+                f"Function Definition: {task.function_definition}\n"
+                f"Test Cases from run_tests(): {task.test_list}\n"
+            )},
         ]
 
         steps = []
@@ -125,9 +123,9 @@ Test Cases from run_tests(): {task.test_list}"""},
                 messages.append({
                     "role": "user",
                     "content": (
-                        "Your previous response was provider safety metadata, not an agent "
-                        "response. Do not output safety labels; follow the required Thought and "
-                        "single Python code-block format."
+                        "Your previous response was provider safety metadata, "
+                        "not an agent response. Do not output safety labels; "
+                        "follow the required Thought and single Python code-block format."
                     ),
                 })
                 continue
@@ -153,6 +151,8 @@ Test Cases from run_tests(): {task.test_list}"""},
                              "content": message if message else ""})
             messages.append({"role": "user",
                              "content": "Sandbox output:\n" + observation})
+            if observation == "":
+                observation = "(no output)"
             print(f"\n{YELLOW}SANDBOX:\n{observation}{RESET}")
 
             steps.append(StepMetrics(
@@ -162,7 +162,7 @@ Test Cases from run_tests(): {task.test_list}"""},
                 request_time_ms=request_time_ms,
                 api_url=args.provider_url,
                 model_name=args.model_name,
-                llm_output=message,
+                llm_output=message if message else "",
                 sandbox_input=sandbox_input,
                 sandbox_output=observation,
                 retries=retries
@@ -229,14 +229,25 @@ async def real_main() -> None:
         return
 
     try:
-        client = Orchestrator(args.model_name, args.provider_url,
-                              args.target, sandbox_conf)
-        await client.sandbox.start_mcp_client(task.test_imports,
-                                              task.test_list)
+        client = Orchestrator(
+            args.model_name,
+            args.provider_url,
+            args.target,
+            sandbox_conf
+        )
+        await client.sandbox.init_mcp_client(task.test_imports, task.test_list)
         result = await client.process_mbpp(task, args)
         print(f"{GREEN}FINAL ANSWER:\n{result.solution}{RESET}\n")
         solution = result.model_dump_json(indent=4)
-        print(solution)
+        print(f"task_id: {result.task_id}")
+        print(f"benchmark: {result.benchmark}")
+        print(f"success: {result.success}")
+        print(f"iterations: {result.iterations}")
+        print(f"total_requests: {result.total_requests}")
+        print(f"total_input_tokens: {result.total_input_tokens}")
+        print(f"total_output_tokens: {result.total_output_tokens}")
+        print(f"total_time_seconds: {result.total_time_seconds}")
+        print(f"timestamp: {result.timestamp}")
         with open(args.output, "w") as f:
             f.write(solution)
     finally:

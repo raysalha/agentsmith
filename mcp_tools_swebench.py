@@ -113,7 +113,7 @@ def edit_file(filepath: str, old_str: str, new_str: str) -> str:
     if count > 1:
         return (
             f"Error: old_str is not unique in '{filepath}' ({count} occurrences). "
-            f"Provide more surrounding context to make it unique. No changes made."
+            "Provide more surrounding context to make it unique. No changes made."
         )
 
     new_content = content.replace(old_str, new_str)
@@ -319,7 +319,11 @@ def run_command(command: str, workdir: str = ".") -> str:
     except OSError as e:
         return f"Error: could not run command: {e}"
 
-    return f"exit_code: {result.returncode}\n--- stdout ---\n{result.stdout}\n--- stderr ---\n{result.stderr}"
+    return (
+        f"exit_code: {result.returncode}\n"
+        f"--- stdout ---\n{result.stdout}\n"
+        f"--- stderr ---\n{result.stderr}"
+    )
 
 
 def main() -> None:
