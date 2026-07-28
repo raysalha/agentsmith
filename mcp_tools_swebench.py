@@ -48,7 +48,8 @@ def _resolve_and_check(path: str) -> tuple[str, str | None]:
     if len(matches) == 1:
         return matches[0], None
     if len(matches) > 1:
-        return "", f"Error: relative path '{path}' is ambiguous; use an absolute path"
+        f = f"Error: relative path '{path}' is ambiguous; use an absolute path"
+        return "", f
 
     return candidates[0], None
 
@@ -78,7 +79,10 @@ def read_file(filepath: str, start_line: int, end_line: int) -> str:
         return f"Error: could not read '{filepath}': {e}"
 
     if start_line > len(lines):
-        return f"Error: start_line {start_line} exceeds file length ({len(lines)} lines)"
+        return (
+            f"Error: start_line {start_line} exceeds "
+            "file length ({len(lines)} lines)"
+        )
 
     selected = lines[start_line - 1:end_line]
     if not selected:
@@ -112,8 +116,9 @@ def edit_file(filepath: str, old_str: str, new_str: str) -> str:
     count = content.count(old_str)
     if count > 1:
         return (
-            f"Error: old_str is not unique in '{filepath}' ({count} occurrences). "
-            "Provide more surrounding context to make it unique. No changes made."
+            f"Error: old_str is not unique in '{filepath}' "
+            f"({count} occurrences). Provide more surrounding "
+            "context to make it unique. No changes made."
         )
 
     new_content = content.replace(old_str, new_str)
@@ -170,7 +175,10 @@ def search_code(pattern: str, file_pattern: str = "*.py") -> str:
                         continue
 
     if not res:
-        return f"No matches found for pattern '{pattern}' in files matching '{file_pattern}'."
+        return (
+            f"No matches found for pattern '{pattern}' in files matching "
+            f"'{file_pattern}'."
+        )
 
     return "\n".join(res)
 
@@ -181,7 +189,7 @@ def search_function_or_class_definition_in_code(name: str) -> str:
     if not ALLOWED_DIRECTORIES:
         return "Error: no allowed directories are configured"
     res = []
-    pattern = re.compile(rf"^\s*(?:async\s+def|def|class)\s+{re.escape(name)}\b")
+    rgx = re.compile(rf"^\s*(?:async\s+def|def|class)\s+{re.escape(name)}\b")
 
     for directory in ALLOWED_DIRECTORIES:
         for root, dirs, files in os.walk(directory):
@@ -193,7 +201,7 @@ def search_function_or_class_definition_in_code(name: str) -> str:
                     try:
                         with open(f_path, "r", encoding="utf-8") as f:
                             for i, line in enumerate(f, start=1):
-                                if pattern.search(line):
+                                if rgx.search(line):
                                     res.append(f"{f_path}:{i} {line.rstrip()}")
                     except (UnicodeDecodeError, PermissionError, OSError):
                         continue
@@ -289,7 +297,10 @@ def get_patch() -> str:
         return f"Error: could not run git diff: {e}"
 
     if result.returncode != 0:
-        return f"Error: git diff failed (exit {result.returncode}): {result.stderr}"
+        return (
+            f"Error: git diff failed (exit {result.returncode}): "
+            f"{result.stderr}"
+        )
 
     if not result.stdout.strip():
         return "Error: no changes detected (empty diff)"

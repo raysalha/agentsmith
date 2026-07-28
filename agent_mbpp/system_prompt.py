@@ -1,3 +1,4 @@
+# flake8: noqa
 from helper.sandbox import Sandbox
 
 

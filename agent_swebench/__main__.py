@@ -7,7 +7,7 @@ import subprocess
 import re
 from typing import Any
 from helper.misc import RED, GREEN, YELLOW, RESET, NO_CODE_BLOCK
-from helper.misc import SWEBENCH_MAX_TURN
+from helper.misc import SWEBENCH_MAX_TURN, MORE_THAN_ONE_CODE_BLOCK
 from dotenv import load_dotenv
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 from contextlib import AsyncExitStack
@@ -147,7 +147,7 @@ class Orchestrator:
             max_retries=0,
         )
 
-    async def create_completion(self, messages: list[dict[str, str]]
+    async def create_completion(self, messages: Any
                                 ) -> tuple[Any, float, int]:
         """Create a completion, retrying transient provider failures."""
         started = time.perf_counter()
@@ -185,7 +185,8 @@ class Orchestrator:
                 "Hints:\n"
                 f"{task.hints_text or 'None'}\n\n"
                 "You must inspect the repository, implement the fix, and "
-                "verify it using the evaluation script exposed by the MCP tools.\n"
+                "verify it using the evaluation script exposed by the MCP tool"
+                "s.\n"
                 "When the evaluation passes, immediately return the diff from "
                 "`get_patch()` through `final_answer(...)`.\n"
             )},
@@ -214,8 +215,10 @@ class Orchestrator:
                 messages.append({
                     "role": "user",
                     "content": (
-                        "Your previous response was provider safety metadata, not an agent "
-                        "response. Do not output safety labels; follow the required Thought and "
+                        "Your previous response was provider safety metadata, "
+                        "not an agent "
+                        "response. Do not output safety labels; follow the "
+                        "required Thought and "
                         "single Python code-block format."
                     ),
                 })
@@ -227,16 +230,18 @@ class Orchestrator:
             except Exception:
                 matches = []
 
-            for match in matches:
-                sandbox_input = match
+            if len(matches) == 1:
+                sandbox_input = matches[0]
                 result = await self.sandbox.run(sandbox_input)
                 if result.final_answer:
                     success = True
                 observation = result.output
                 if result.error:
                     observation += f"{RED}ERROR: {result.error}{RESET}"
-            if len(matches) < 1:
+            elif len(matches) < 1:
                 observation = NO_CODE_BLOCK
+            else:
+                observation = MORE_THAN_ONE_CODE_BLOCK
 
             messages.append({"role": "assistant", "content":
                              message if message else ""})
@@ -297,12 +302,18 @@ class Orchestrator:
 
 async def real_main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--task-file", default="task.json")
-    ap.add_argument("--output", default="solution.json")
-    ap.add_argument("--model-name", default="openai/gpt-oss-120b")
-    ap.add_argument("--provider-url", default="https://api.groq.com/openai/v1")
-    ap.add_argument("--target", default="agent_mbpp/mcp_tools_swebench.py")
-    ap.add_argument("--sandbox-conf", default=None)
+    ap.add_argument("--task-file", default="task.json",
+                    help="input file containing SWE-bench task")
+    ap.add_argument("--output", default="solution.json",
+                    help="output file path")
+    ap.add_argument("--model-name", default="openai/gpt-oss-120b",
+                    help="LLM name")
+    ap.add_argument("--provider-url", default="https://api.groq.com/openai/v1",
+                    help="LLM provider")
+    ap.add_argument("--target", default="agent_mbpp/mcp_tools_mbpp.py",
+                    help="MCP tools server URL or file path")
+    ap.add_argument("--sandbox-conf", default=None,
+                    help="sandbox JSON config")
     args = ap.parse_args()
 
     sandbox_conf = SandboxConfig()
