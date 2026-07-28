@@ -49,9 +49,9 @@ def is_retryable_error(error: Exception) -> bool:
             in RETRYABLE_STATUS_CODES)
 
 
-def setup_docker(task: SWEBenchTaskInput, repo_root: str) -> tuple[Any, Any]:
+def setup_docker(task: SWEBenchTaskInput) -> tuple[Any, Any]:
     image = task.docker_image
-    volume_dir = os.path.join(repo_root, ".docker", task.instance_id)
+    volume_dir = "/tmp/agent"
     os.makedirs(volume_dir, exist_ok=True)
 
     print("Downloading image...")
@@ -340,8 +340,7 @@ async def real_main() -> None:
         return
 
     try:
-        repo_root = os.path.abspath(os.getcwd())
-        container_name, volume_dir = setup_docker(task, repo_root)
+        container_name, volume_dir = setup_docker(task)
         sandbox_conf.allowed_directories = [volume_dir]
         client = Orchestrator(
             args.model_name,
@@ -349,11 +348,10 @@ async def real_main() -> None:
             args.target,
             sandbox_conf
         )
-        with open("eval.sh", "w") as f:
+        with open("/tmp/eval.sh", "w") as f:
             f.write(task.eval_script)
         await client.sandbox.init_mcp_client()
         os.environ["AGENT_DOCKER_CONTAINER"] = container_name
-        os.environ["EVAL_SCRIPT_PATH"] = os.path.abspath("eval.sh")
         result = await client.process_swe(task, args)
         print(f"{GREEN}FINAL ANSWER:\n{result.solution}{RESET}\n")
         solution = result.model_dump_json(indent=4)

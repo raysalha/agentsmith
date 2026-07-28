@@ -30,6 +30,7 @@ class MCPClient:
                 args.extend(["--imports", str(imp)])
             for test in tests or []:
                 args.extend(["--tests", str(test)])
+            args.extend(["--eval-script", "/tmp/eval.sh"])
             server_params = StdioServerParameters(
                 command="uv",
                 args=args,

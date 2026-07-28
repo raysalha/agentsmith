@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-EVAL_SCRIPT_PATH = os.getenv("EVAL_SCRIPT_PATH")
+EVAL_SCRIPT_PATH: str = ""
 ALLOWED_DIRECTORIES: tuple[str, ...] = ()
 
 mcp = FastMCP("agent_bob")
@@ -342,6 +342,7 @@ def main() -> None:
     parser.add_argument("--transport", choices=["stdio", "streamable-http"],
                         default="stdio")
     parser.add_argument("--allowed-directory", action="append", default=[])
+    parser.add_argument("--eval-script", default="/tmp/eval.sh")
     args = parser.parse_args()
 
     if not args.allowed_directory:
@@ -349,6 +350,8 @@ def main() -> None:
     global ALLOWED_DIRECTORIES
     ALLOWED_DIRECTORIES = tuple(os.path.realpath(path)
                                 for path in args.allowed_directory)
+    global EVAL_SCRIPT_PATH
+    EVAL_SCRIPT_PATH = args.eval_script
 
     mcp.run(transport=args.transport)
 
