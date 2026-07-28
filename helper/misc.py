@@ -42,6 +42,10 @@ Thought:
 # python code only
 ```"""
 
-MAX_TURN_ERROR = RED + "FINAL ANSWER: Unable to complete the task within the tool-turn limit." + RESET
+SAFETY_MSG = ("Your previous response was provider safety metadata, not an "
+              "agent response. Do not output safety labels; follow the "
+              "required Thought and single Python code-block format.")
+
+MAX_TURN_ERROR = "Unable to complete the task within the tool-turn limit."
 
 EXIT_ERROR = "Sandbox process exited unexpectedly"

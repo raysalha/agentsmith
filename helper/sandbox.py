@@ -19,19 +19,21 @@ AUTHORIZED_BUILTINS = (
 
 
 class Sandbox:
-    def __init__(self, conf: SandboxConfig, server: str):
+    def __init__(self, conf: SandboxConfig, server: str,
+                 eval_script: Optional[str]):
         self.authorized_imports = conf.authorized_imports
         self.allowed_directories = conf.allowed_directories
         self.authorized_builtins = list(AUTHORIZED_BUILTINS)
         self.max_exec_time = conf.max_execution_time_seconds
         self.max_memory_mb = conf.max_memory_mb
         self.server = server
+        self.eval_script = eval_script
         self.client = MCPClient()
         self.tool_parameters: dict[str, Any] = {}
 
     async def init_mcp_client(self, imports: list[str] | None = None,
                               tests: list[str] | None = None) -> None:
-        await self.client.connect_to_server(self.server,
+        await self.client.connect_to_server(self.server, self.eval_script,
                                             self.allowed_directories,
                                             imports, tests)
         self.tool_parameters = {
@@ -67,8 +69,9 @@ class Sandbox:
 
         async def handle_tool_call(tool_name: str, kwargs: dict) -> None:
             try:
-                call_result = await self.client.session.call_tool(tool_name,
-                                                                  kwargs)
+                if self.client.session:
+                    call_result = await self.client.session.call_tool(
+                        tool_name, kwargs)
                 output = "\n".join(
                     block.text for block in call_result.content
                     if hasattr(block, "text")
@@ -227,11 +230,11 @@ async def _async_main() -> None:
                 print("JSON format error:", e)
 
     if (args.mcp_stdio):
-        sandbox = Sandbox(conf, args.mcp_stdio)
+        sandbox = Sandbox(conf, args.mcp_stdio, None)
     elif (args.mcp_server):
-        sandbox = Sandbox(conf, args.mcp_server)
+        sandbox = Sandbox(conf, args.mcp_server, None)
     else:
-        sandbox = Sandbox(conf, "")
+        sandbox = Sandbox(conf, "", None)
 
     full_query = ""
     try:

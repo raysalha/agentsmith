@@ -1,5 +1,6 @@
 from contextlib import AsyncExitStack
 from pathlib import Path
+from typing import Optional
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
@@ -11,7 +12,7 @@ class MCPClient:
         self.exit_stack = AsyncExitStack()
 
     async def connect_to_server(
-        self, target: str,
+        self, target: str, eval_script: Optional[str],
         allowed_directories: list[str] | None = None,
         imports: list[str] | None = None,
         tests: list[str] | None = None,
@@ -30,15 +31,20 @@ class MCPClient:
                 args.extend(["--imports", str(imp)])
             for test in tests or []:
                 args.extend(["--tests", str(test)])
-            args.extend(["--eval-script", "/tmp/eval.sh"])
+            if eval_script:
+                args.extend(["--eval-script", eval_script])
             server_params = StdioServerParameters(
                 command="uv",
                 args=args,
             )
 
-            read, write = await self.exit_stack.enter_async_context(stdio_client(server_params))
+            read, write = await self.exit_stack.enter_async_context(
+                stdio_client(server_params)
+            )
 
-        self.session = await self.exit_stack.enter_async_context(ClientSession(read, write))
+        self.session = await self.exit_stack.enter_async_context(
+            ClientSession(read, write)
+        )
 
         await self.session.initialize()
 

@@ -1,5 +1,17 @@
 # flake8: noqa
+from helper.data_models import MBPPTaskInput
 from helper.sandbox import Sandbox
+
+
+def build_user_prompt_mbpp(task: MBPPTaskInput) -> str:
+    return f"""This is an MBPP task.
+Write the requested Python function using the exact function signature.
+Before calling final_answer(), you MUST verify your solution by calling: run_tests(code)
+Only call final_answer(code) after all tests pass.
+
+Task: {task.task_definition}
+Function Definition: {task.function_definition}
+Test Cases from run_tests(): {task.test_list}"""
 
 
 def build_system_prompt_mbpp(sandbox: Sandbox) -> str:

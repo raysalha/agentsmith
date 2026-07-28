@@ -1,8 +1,23 @@
 # flake8: noqa
+from helper.data_models import SWEBenchTaskInput
 from helper.sandbox import Sandbox
 
 
-def build_system_prompt(sandbox: Sandbox) -> str:
+def build_user_prompt_swe(task: SWEBenchTaskInput) -> str:
+    return f"""This is a SWE-bench task.
+Instance ID: {task.instance_id}
+Repository: {task.repo or 'unknown'}
+Problem statement:
+{task.problem_statement}
+
+Hints:
+{task.hints_text or 'None'}
+
+You must inspect the repository, implement the fix, and verify it using the evaluation script exposed by the MCP tools.
+When the evaluation passes, immediately return the diff from `get_patch()` through `final_answer(...)`."""
+
+
+def build_system_prompt_swe(sandbox: Sandbox) -> str:
     tool_lines = []
     for t in sandbox.client.tools:
         params = ", ".join((t.inputSchema or {}).get("properties", {}).keys())
