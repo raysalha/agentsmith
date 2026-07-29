@@ -85,5 +85,5 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         pass
-    # except Exception as e:
-    #     print(e)
+    except Exception as e:
+        print(e)

@@ -20,7 +20,7 @@ run_mbpp:
 run_swebench:
 	clear
 	$(PY) agent_swebench \
-		--task-file swe_tasks/sympy__sympy-18189.json \
+		--task-file swe_tasks/django__django-15499.json \
 		--output swebench_solution.json \
 		--model-name openrouter/free \
 		--provider-url https://openrouter.ai/api/v1 \
