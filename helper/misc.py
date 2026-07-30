@@ -16,7 +16,8 @@ MAGENTA = "\033[95m"
 CYAN = "\033[96m"
 RESET = "\033[0m"
 
-NO_CODE_BLOCK = """ERROR: Your previous response violated the required protocol.
+NO_CODE_BLOCK = """
+ERROR: Your previous response violated the required protocol.
 Reason: No Python code block was found.
 
 You must reply using EXACTLY this format:
@@ -28,8 +29,36 @@ Thought:
 # python code only
 ```"""
 
-MORE_THAN_ONE_CODE_BLOCK = """ERROR: Your previous response violated the required protocol.
+EMPTY_LLM_RESPONSE = """
+ERROR: The provider returned an empty response.
+
+Reply again using EXACTLY this format:
+
+Thought:
+<one sentence describing why the next action is needed>
+
+```python
+# python code only
+```"""
+
+MORE_THAN_ONE_CODE_BLOCK = """
+ERROR: Your previous response violated the required protocol.
 Reason: More than one Python code block was generated.
+
+Reply again using EXACTLY this format:
+
+Thought:
+<one sentence describing why the next action is needed>
+
+```python
+# python code only
+```"""
+
+INVALID_RESPONSE_FORMAT = """
+ERROR: Your previous response violated the required protocol.
+Reason: The response must contain only a Thought section followed by exactly
+one Python code block, with no text before Thought and no text after the
+closing code fence.
 
 Reply again using EXACTLY this format:
 

@@ -5,6 +5,7 @@ from helper.misc import GREEN, RESET
 from dotenv import load_dotenv
 from helper.orchestrator import Orchestrator
 from helper.data_models import MBPPTaskInput, SandboxConfig
+from helper.models import model_pool_help, pick_model
 
 load_dotenv()
 
@@ -15,8 +16,9 @@ async def real_main() -> None:
                     help="input file containing MBPP task")
     ap.add_argument("--output", default="solution.json",
                     help="output file path")
-    ap.add_argument("--model-name", default="openrouter/free",
-                    help="LLM name")
+    ap.add_argument("--model-name", default=None,
+                    help=("LLM name override. If omitted, one is picked from: "
+                          f"{model_pool_help()}"))
     ap.add_argument("--provider-url", default="https://openrouter.ai/api/v1",
                     help="LLM provider")
     ap.add_argument("--target", default="mcp_tools_mbpp.py",
@@ -24,6 +26,8 @@ async def real_main() -> None:
     ap.add_argument("--sandbox-conf", default=None,
                     help="sandbox JSON config")
     args = ap.parse_args()
+    args.model_name = pick_model(args.model_name)
+    print("Using model:", args.model_name)
 
     sandbox_conf = SandboxConfig()
     if (args.sandbox_conf):

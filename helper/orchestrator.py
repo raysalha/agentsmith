@@ -13,6 +13,7 @@ from agent_swebench.system_prompt import build_system_prompt_swe
 from agent_swebench.system_prompt import build_user_prompt_swe
 from helper.data_models import MBPPTaskInput, SWEBenchTaskInput, SandboxConfig
 from helper.data_models import SolutionOutput, StepMetrics
+from helper.misc import EMPTY_LLM_RESPONSE, INVALID_RESPONSE_FORMAT
 from helper.misc import MAX_TURN_ERROR, MBPP_MAX_TURN, MORE_THAN_ONE_CODE_BLOCK
 from helper.misc import RED, RESET, SWEBENCH_MAX_TURN, YELLOW, SAFETY_MSG
 from helper.misc import NO_CODE_BLOCK
@@ -23,8 +24,17 @@ load_dotenv()
 API_KEY = os.getenv("OPENROUTER_API")
 
 SAFETY_STATUS_RESPONSE = re.compile(
-    r"\s*user\s+safety\s*:\s*\w+\s*response\s+safety\s*:\s*\w+\s*",
+    r"\A\s*user\s+safety\s*:\s*\w+\s*"
+    r"response\s+safety\s*:\s*\w+"
+    r"(?:\s*safety\s+categories\s*:.*)?\s*\Z",
     re.IGNORECASE,
+)
+PYTHON_BLOCK = re.compile(r"```python\s*([\s\S]*?)```", re.IGNORECASE)
+STRICT_AGENT_RESPONSE = re.compile(
+    r"\AThought:\s*\n"
+    r"[^\n].*?\n\n"
+    r"```python\s*\n?([\s\S]*?)```\s*\Z",
+    re.DOTALL,
 )
 MAX_REQUEST_RETRIES = 3
 RETRYABLE_STATUS_CODES = {408, 409, 429, 500, 502, 503, 504}
@@ -33,6 +43,30 @@ RETRYABLE_STATUS_CODES = {408, 409, 429, 500, 502, 503, 504}
 def is_safety_status_response(message: str) -> bool:
     """Return whether a provider returned metadata instead of an answer."""
     return bool(SAFETY_STATUS_RESPONSE.fullmatch(message))
+
+
+def response_protocol_error(message: str) -> str | None:
+    """Return protocol feedback if a model response must not be executed."""
+    if not message.strip():
+        return EMPTY_LLM_RESPONSE
+    if is_safety_status_response(message):
+        return SAFETY_MSG
+
+    matches = PYTHON_BLOCK.findall(message)
+    if len(matches) < 1:
+        return NO_CODE_BLOCK
+    if len(matches) > 1:
+        return MORE_THAN_ONE_CODE_BLOCK
+    if not STRICT_AGENT_RESPONSE.fullmatch(message.strip()):
+        return INVALID_RESPONSE_FORMAT
+    return None
+
+
+def extract_python_code(message: str) -> str:
+    match = STRICT_AGENT_RESPONSE.fullmatch(message.strip())
+    if not match:
+        raise ValueError("Cannot extract code from invalid agent response.")
+    return match.group(1)
 
 
 def token_counts(response: Any) -> tuple[int, int]:
@@ -129,28 +163,21 @@ class Orchestrator:
             llm_output = message if message else ""
             print(llm_output)
 
-            if is_safety_status_response(llm_output):
-                messages.append({"role": "assistant", "content": llm_output})
-                messages.append({"role": "user", "content": SAFETY_MSG})
+            protocol_error = response_protocol_error(llm_output)
+            if protocol_error:
+                observation = protocol_error
+                sandbox_output = "Sandbox output:\n" + observation
+                messages.append({"role": "assistant",
+                                 "content": llm_output or "<empty response>"})
+                messages.append({"role": "user", "content": sandbox_output})
             else:
-
-                try:
-                    matches = re.findall(r"```python\s*([\s\S]*?)```", llm_output)
-                except Exception:
-                    matches = []
-    
-                if len(matches) == 1:
-                    sandbox_input = matches[0]
-                    result = await self.sandbox.run(sandbox_input)
-                    if result.final_answer:
-                        success = True
-                    observation = result.output
-                    if result.error:
-                        observation += f"{RED}ERROR: {result.error}{RESET}"
-                elif len(matches) < 1:
-                    observation = NO_CODE_BLOCK
-                else:
-                    observation = MORE_THAN_ONE_CODE_BLOCK
+                sandbox_input = extract_python_code(llm_output)
+                result = await self.sandbox.run(sandbox_input)
+                if result.final_answer:
+                    success = True
+                observation = result.output
+                if result.error:
+                    observation += f"{RED}ERROR: {result.error}{RESET}"
 
                 sandbox_output = "Sandbox output:\n" + observation
                 messages.append({"role": "assistant", "content": llm_output})

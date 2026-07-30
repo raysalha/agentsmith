@@ -8,6 +8,7 @@ from helper.misc import GREEN, RESET
 from dotenv import load_dotenv
 from helper.orchestrator import Orchestrator
 from helper.data_models import SWEBenchTaskInput, SandboxConfig
+from helper.models import model_pool_help, pick_model
 
 load_dotenv()
 
@@ -104,8 +105,9 @@ async def real_main() -> None:
                     help="input file containing SWE-bench task")
     ap.add_argument("--output", default="solution.json",
                     help="output file path")
-    ap.add_argument("--model-name", default="openrouter/free",
-                    help="LLM name")
+    ap.add_argument("--model-name", default=None,
+                    help=("LLM name override. If omitted, one is picked from: "
+                          f"{model_pool_help()}"))
     ap.add_argument("--provider-url", default="https://openrouter.ai/api/v1",
                     help="LLM provider")
     ap.add_argument("--target", default="mcp_tools_swebench.py",
@@ -113,6 +115,8 @@ async def real_main() -> None:
     ap.add_argument("--sandbox-conf", default=None,
                     help="sandbox JSON config")
     args = ap.parse_args()
+    args.model_name = pick_model(args.model_name)
+    print("Using model:", args.model_name)
 
     sandbox_conf = SandboxConfig()
     if (args.sandbox_conf):
@@ -136,6 +140,7 @@ async def real_main() -> None:
 
     try:
         container_name, volume_dir = setup_docker(task)
+        os.environ["AGENT_DOCKER_CONTAINER"] = container_name
         sandbox_conf.allowed_directories = [volume_dir]
         client = Orchestrator(
             args.model_name,
@@ -146,7 +151,6 @@ async def real_main() -> None:
         )
         with open("/tmp/eval.sh", "w") as f:
             f.write(task.eval_script)
-        os.environ["AGENT_DOCKER_CONTAINER"] = container_name
         await client.sandbox.init_mcp_client()
         result = await client.process_query(task, args)
         print(f"{GREEN}FINAL ANSWER:\n{result.solution}{RESET}\n")
@@ -175,6 +179,13 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        pass
+        container_name = os.getenv("AGENT_DOCKER_CONTAINER")
+        if container_name:
+            subprocess.run(
+                ["docker", "rm", "-f", container_name],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
     except Exception as e:
         print(e)
