@@ -117,6 +117,7 @@ class Orchestrator:
         for i in range(turns):
             message = ""
             sandbox_input = ""
+            sandbox_output = ""
             observation = ""
             print(f"\nTURN: ({i+1}/{turns}):")
 
@@ -131,29 +132,29 @@ class Orchestrator:
             if is_safety_status_response(llm_output):
                 messages.append({"role": "assistant", "content": llm_output})
                 messages.append({"role": "user", "content": SAFETY_MSG})
-                continue
-
-            try:
-                matches = re.findall(r"```python\s*([\s\S]*?)```", llm_output)
-            except Exception:
-                matches = []
-
-            if len(matches) == 1:
-                sandbox_input = matches[0]
-                result = await self.sandbox.run(sandbox_input)
-                if result.final_answer:
-                    success = True
-                observation = result.output
-                if result.error:
-                    observation += f"{RED}ERROR: {result.error}{RESET}"
-            elif len(matches) < 1:
-                observation = NO_CODE_BLOCK
             else:
-                observation = MORE_THAN_ONE_CODE_BLOCK
 
-            sandbox_output = "Sandbox output:\n" + observation
-            messages.append({"role": "assistant", "content": llm_output})
-            messages.append({"role": "user", "content": sandbox_output})
+                try:
+                    matches = re.findall(r"```python\s*([\s\S]*?)```", llm_output)
+                except Exception:
+                    matches = []
+    
+                if len(matches) == 1:
+                    sandbox_input = matches[0]
+                    result = await self.sandbox.run(sandbox_input)
+                    if result.final_answer:
+                        success = True
+                    observation = result.output
+                    if result.error:
+                        observation += f"{RED}ERROR: {result.error}{RESET}"
+                elif len(matches) < 1:
+                    observation = NO_CODE_BLOCK
+                else:
+                    observation = MORE_THAN_ONE_CODE_BLOCK
+
+                sandbox_output = "Sandbox output:\n" + observation
+                messages.append({"role": "assistant", "content": llm_output})
+                messages.append({"role": "user", "content": sandbox_output})
 
             print(f"\n{YELLOW}SANDBOX:\n{observation}{RESET}")
 

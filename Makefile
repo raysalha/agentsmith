@@ -11,7 +11,7 @@ install:
 run_mbpp:
 	clear
 	$(PY) agent_mbpp \
-		--task-file mbpp_tasks/123.json \
+		--task-file mbpp_tasks/809.json \
 		--output mbpp_solution.json \
 		--model-name openrouter/free \
 		--provider-url https://openrouter.ai/api/v1 \
@@ -20,7 +20,7 @@ run_mbpp:
 run_swebench:
 	clear
 	$(PY) agent_swebench \
-		--task-file swe_tasks/django__django-15499.json \
+		--task-file swe_tasks/pydata__xarray-4094.json \
 		--output swebench_solution.json \
 		--model-name openrouter/free \
 		--provider-url https://openrouter.ai/api/v1 \

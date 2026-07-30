@@ -104,11 +104,11 @@ async def real_main() -> None:
                     help="input file containing SWE-bench task")
     ap.add_argument("--output", default="solution.json",
                     help="output file path")
-    ap.add_argument("--model-name", default="openai/gpt-oss-120b",
+    ap.add_argument("--model-name", default="openrouter/free",
                     help="LLM name")
-    ap.add_argument("--provider-url", default="https://api.groq.com/openai/v1",
+    ap.add_argument("--provider-url", default="https://openrouter.ai/api/v1",
                     help="LLM provider")
-    ap.add_argument("--target", default="agent_mbpp/mcp_tools_mbpp.py",
+    ap.add_argument("--target", default="mcp_tools_swebench.py",
                     help="MCP tools server URL or file path")
     ap.add_argument("--sandbox-conf", default=None,
                     help="sandbox JSON config")

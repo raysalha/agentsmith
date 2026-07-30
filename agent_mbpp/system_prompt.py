@@ -46,6 +46,10 @@ Never:
 
 The user ONLY sees the argument passed to final_answer().
 
+You only have 10 turns and a maximum of 6000 input tokens and 1500 output tokens.
+
+DO NOT execed these limits and generate responses wisely.
+
 ==============================
 AVAILABLE FUNCTIONS
 ==============================
@@ -219,6 +223,4 @@ REMEMBER
 - Never assume the tests passed.
 - Call `final_answer(code)` immediately after a successful `run_tests(code)`.
 - If the tests fail, print the test results and try again.
-- Never generate another Python code block after calling `final_answer(code)`.
-
-"""
+- Never generate another Python code block after calling `final_answer(code)`."""

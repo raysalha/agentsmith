@@ -16,8 +16,7 @@ MAGENTA = "\033[95m"
 CYAN = "\033[96m"
 RESET = "\033[0m"
 
-NO_CODE_BLOCK = """Sandbox output:
-ERROR: Your previous response violated the required protocol.
+NO_CODE_BLOCK = """ERROR: Your previous response violated the required protocol.
 Reason: No Python code block was found.
 
 You must reply using EXACTLY this format:
@@ -29,8 +28,7 @@ Thought:
 # python code only
 ```"""
 
-MORE_THAN_ONE_CODE_BLOCK = """Sandbox output:
-ERROR: Your previous response violated the required protocol.
+MORE_THAN_ONE_CODE_BLOCK = """ERROR: Your previous response violated the required protocol.
 Reason: More than one Python code block was generated.
 
 Reply again using EXACTLY this format:
