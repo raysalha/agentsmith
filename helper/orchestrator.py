@@ -4,8 +4,6 @@ import os
 import re
 import subprocess
 import time
-import json
-import xml.etree.ElementTree as ET
 from typing import Any, Optional
 from dotenv import load_dotenv
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
@@ -15,9 +13,9 @@ from agent_swebench.system_prompt import build_system_prompt_swe
 from agent_swebench.system_prompt import build_user_prompt_swe
 from helper.data_models import MBPPTaskInput, SWEBenchTaskInput, SandboxConfig
 from helper.data_models import SolutionOutput, StepMetrics
-from helper.misc import MAX_TURN_ERROR, MBPP_MAX_TURN, INVALID_JSON
+from helper.misc import MAX_TURN_ERROR, MBPP_MAX_TURN, MORE_THAN_ONE_CODE_BLOCK
 from helper.misc import RED, RESET, SWEBENCH_MAX_TURN, YELLOW, SAFETY_MSG
-from helper.misc import NO_CODE_BLOCK, MORE_THAN_ONE_CODE_BLOCK
+from helper.misc import NO_CODE_BLOCK
 from helper.sandbox import Sandbox
 
 load_dotenv()
@@ -112,114 +110,51 @@ class Orchestrator:
 
         steps = []
         success = False
-        message = ""
-        sandbox_input = ""
-        observation = ""
         total_requests = 0
         start = time.perf_counter()
         result = None
         turns = MBPP_MAX_TURN if benchmark == "mbpp" else SWEBENCH_MAX_TURN
         for i in range(turns):
+            message = ""
+            sandbox_input = ""
+            observation = ""
             print(f"\nTURN: ({i+1}/{turns}):")
 
             response, time_ms, retries = await self.create_completion(messages)
             total_requests += retries + 1
 
             input_tokens, output_tokens = token_counts(response)
-            try:
-                message = response.choices[0].message.content
-            except Exception:
-                print("FAK")
-            print(message)
+            message = response.choices[0].message.content
+            llm_output = message if message else ""
+            print(llm_output)
 
-            if is_safety_status_response(message or ""):
-                messages.append({
-                    "role": "user",
-                    "content": SAFETY_MSG,
-                })
+            if is_safety_status_response(llm_output):
+                messages.append({"role": "assistant", "content": llm_output})
+                messages.append({"role": "user", "content": SAFETY_MSG})
                 continue
 
-            python_blocks = re.findall(
-                r"```python\s*\n?([\s\S]*?)```",
-                message if message else "",
-                re.IGNORECASE,
-            )
+            try:
+                matches = re.findall(r"```python\s*([\s\S]*?)```", llm_output)
+            except Exception:
+                matches = []
 
-            xml_calls = re.findall(
-                r"<invoke\b[\s\S]*?</invoke>",
-                message if message else "",
-                re.IGNORECASE,
-            )
-
-            json_calls = re.findall(
-                r"<tool_call>\s*([\s\S]*?)\s*</tool_call>",
-                message if message else "",
-                re.IGNORECASE,
-            )
-
-            if len(python_blocks) > 1:
-                observation = MORE_THAN_ONE_CODE_BLOCK
-            elif python_blocks:
-                sandbox_input = python_blocks[0]
+            if len(matches) == 1:
+                sandbox_input = matches[0]
                 result = await self.sandbox.run(sandbox_input)
                 if result.final_answer:
                     success = True
                 observation = result.output
                 if result.error:
                     observation += f"{RED}ERROR: {result.error}{RESET}"
-
-            elif xml_calls:
-                sandbox_input = ""
-                for call in xml_calls:
-                    try:
-                        root = ET.fromstring(call)
-                        name = root.attrib["name"]
-                        args = {}
-                        for param in root.findall("parameter"):
-                            key = param.attrib["name"]
-                            value = param.text or ""
-                            args[key] = value
-                        params = ", ".join(
-                            f"{k}={repr(v)}" for k, v in args.items()
-                        )
-                        sandbox_input += f"result = {name}({params})\nprint(result)\n"
-                    except Exception:
-                        observation += INVALID_XML
-                result = await self.sandbox.run(sandbox_input)
-                if result.final_answer:
-                    success = True
-                observation = result.output
-                if result.error:
-                    observation += f"{RED}ERROR: {result.error}{RESET}"
-
-            elif json_calls:
-                sandbox_input = ""
-                for call in json_calls:
-                    try:
-                        tool = json.loads(call)
-                        name = tool["name"]
-                        args = tool["arguments"]
-                        params = ", ".join(
-                            f"{k}={repr(v)}"
-                            for k, v in args.items()
-                        )
-                        sandbox_input += f"a = {name}({params})\nprint(a)\n"
-                    except Exception:
-                        observation += INVALID_JSON
-                result = await self.sandbox.run(sandbox_input)
-                if result.final_answer:
-                    success = True
-                observation = result.output
-                if result.error:
-                    observation += f"{RED}ERROR: {result.error}{RESET}"
-
-            else:
+            elif len(matches) < 1:
                 observation = NO_CODE_BLOCK
+            else:
+                observation = MORE_THAN_ONE_CODE_BLOCK
 
-            messages.append({"role": "assistant", "content":
-                             message if message else ""})
-            messages.append({"role": "user", "content":
-                             "Sandbox output:\n" + observation})
+            sandbox_output = "Sandbox output:\n" + observation
+            messages.append({"role": "assistant", "content": llm_output})
+            messages.append({"role": "user", "content": sandbox_output})
+
             print(f"\n{YELLOW}SANDBOX:\n{observation}{RESET}")
 
             steps.append(StepMetrics(
@@ -228,10 +163,10 @@ class Orchestrator:
                 output_tokens=output_tokens,
                 request_time_ms=time_ms,
                 api_url=args.provider_url,
-                model_name=args.model_name,
-                llm_output=message if message else "",
+                model_name=response.model,
+                llm_output=llm_output,
                 sandbox_input=sandbox_input,
-                sandbox_output=observation,
+                sandbox_output=sandbox_output,
                 retries=retries,
             ))
             if success:

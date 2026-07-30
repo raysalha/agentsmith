@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 import json
-import os
 from helper.misc import GREEN, RESET
 from dotenv import load_dotenv
 from helper.orchestrator import Orchestrator
@@ -44,11 +43,6 @@ async def real_main() -> None:
             print("ERROR: Invalid task JSON")
             return
 
-    api_key = os.getenv("OPENROUTER_API")
-    if not api_key:
-        print("Invalid or no API key")
-        return
-
     try:
         client = Orchestrator(
             args.model_name,
@@ -61,19 +55,20 @@ async def real_main() -> None:
         result = await client.process_query(task, args)
         print(f"{GREEN}FINAL ANSWER:\n{result.solution}{RESET}\n")
         solution = result.model_dump_json(indent=4)
-        print(f"task_id: {result.task_id}")
-        print(f"benchmark: {result.benchmark}")
-        print(f"success: {result.success}")
-        print(f"iterations: {result.iterations}")
-        print(f"total_requests: {result.total_requests}")
-        print(f"total_input_tokens: {result.total_input_tokens}")
-        print(f"total_output_tokens: {result.total_output_tokens}")
-        print(f"total_time_seconds: {result.total_time_seconds}")
-        print(f"timestamp: {result.timestamp}")
+        print("task_id:", result.task_id)
+        print("benchmark:", result.benchmark)
+        print("success:", result.success)
+        print("iterations:", result.iterations)
+        print("total_requests:", result.total_requests)
+        print("total_input_tokens:", result.total_input_tokens)
+        print("total_output_tokens:", result.total_output_tokens)
+        print("total_time_seconds:", result.total_time_seconds)
+        print("timestamp:", result.timestamp)
         with open(args.output, "w") as f:
             f.write(solution)
     finally:
-        await client.cleanup()
+        if client:
+            await client.cleanup()
 
 
 def main() -> None:

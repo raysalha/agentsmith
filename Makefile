@@ -11,7 +11,7 @@ install:
 run_mbpp:
 	clear
 	$(PY) agent_mbpp \
-		--task-file mbpp_tasks/809.json \
+		--task-file mbpp_tasks/123.json \
 		--output mbpp_solution.json \
 		--model-name openrouter/free \
 		--provider-url https://openrouter.ai/api/v1 \
