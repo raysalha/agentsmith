@@ -26,6 +26,19 @@ def build_system_prompt_swe(sandbox: Sandbox) -> str:
     tools_doc = "\n".join(tool_lines)
     imports_doc = ", ".join(sandbox.authorized_imports)
     builtins_doc = ", ".join(sandbox.authorized_builtins)
+    json_format = """{
+  "Thought": "one sentence describing why the next action is needed",
+  "Python": "python code only"
+}"""
+    json_example1 = """{
+  "Thought": "Search for the unstack method definition in dataset.py.",
+  "Python": "result = search_function_or_class_definition_in_code('unstack'); print(result)"
+}"""
+
+    json_example2 = """{
+  "Thought": "I need to get the final answer",
+  "Python": "final_answer(get_patch())"
+}"""
 
     return f"""You are Agent Smith an autonomous software engineering agent.
 You solve tasks by writing Python code that executes inside a sandbox.
@@ -111,6 +124,8 @@ Only these builtins may be used:
 
 Using any other import or builtin will fail.
 
+The repo root is "/tmp/agent/"
+
 ==============================
 RESPONSE FORMAT
 ==============================
@@ -124,13 +139,18 @@ Thought:
 # python code only
 ```
 
+OR
+
+{json_format}
+
 Rules:
 
 - Exactly one Thought section.
 - Exactly one python code block.
 - No text before Thought.
 - No text after the closing ```.
-- Do NOT generate JSON or XML
+- You can use JSON but Python is recommended
+- Do NOT generate XML
 
 ==============================
 EXAMPLES
@@ -202,6 +222,12 @@ final_answer(
     get_patch()
 )
 ```
+
+JSON EXAMPLES:
+
+{json_example1}
+
+{json_example2}
 
 ==============================
 INVALID RESPONSES

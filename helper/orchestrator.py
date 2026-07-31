@@ -1,3 +1,4 @@
+import traceback
 import asyncio
 from contextlib import AsyncExitStack
 import os
@@ -13,15 +14,16 @@ from agent_swebench.system_prompt import build_system_prompt_swe
 from agent_swebench.system_prompt import build_user_prompt_swe
 from helper.data_models import MBPPTaskInput, SWEBenchTaskInput, SandboxConfig
 from helper.data_models import SolutionOutput, StepMetrics
-from helper.misc import EMPTY_LLM_RESPONSE, INVALID_RESPONSE_FORMAT
 from helper.misc import MAX_TURN_ERROR, MBPP_MAX_TURN, MORE_THAN_ONE_CODE_BLOCK
 from helper.misc import RED, RESET, SWEBENCH_MAX_TURN, YELLOW, SAFETY_MSG
-from helper.misc import NO_CODE_BLOCK
+from helper.misc import NO_CODE_BLOCK, EMPTY_LLM_RESPONSE
+from helper.models import pick_model
 from helper.sandbox import Sandbox
 
 load_dotenv()
 
-API_KEY = os.getenv("OPENROUTER_API")
+API_KEYS = os.getenv("OPENROUTER_API", "").split(",")
+API_KEY = API_KEYS[0]
 
 SAFETY_STATUS_RESPONSE = re.compile(
     r"\A\s*user\s+safety\s*:\s*\w+\s*"
@@ -30,12 +32,7 @@ SAFETY_STATUS_RESPONSE = re.compile(
     re.IGNORECASE,
 )
 PYTHON_BLOCK = re.compile(r"```python\s*([\s\S]*?)```", re.IGNORECASE)
-STRICT_AGENT_RESPONSE = re.compile(
-    r"\AThought:\s*\n"
-    r"[^\n].*?\n\n"
-    r"```python\s*\n?([\s\S]*?)```\s*\Z",
-    re.DOTALL,
-)
+JSON_BLOCK = re.compile(r'"Python"\s*:\s*"((?:\\.|[^"\\])*)"', re.IGNORECASE)
 MAX_REQUEST_RETRIES = 3
 RETRYABLE_STATUS_CODES = {408, 409, 429, 500, 502, 503, 504}
 
@@ -52,21 +49,22 @@ def response_protocol_error(message: str) -> str | None:
     if is_safety_status_response(message):
         return SAFETY_MSG
 
-    matches = PYTHON_BLOCK.findall(message)
-    if len(matches) < 1:
+    matches_py = PYTHON_BLOCK.findall(message)
+    matches_json = JSON_BLOCK.findall(message)
+    if len(matches_py) < 1 and len(matches_json) < 1:
         return NO_CODE_BLOCK
-    if len(matches) > 1:
+    if len(matches_py) > 1 and len(matches_json) > 1:
         return MORE_THAN_ONE_CODE_BLOCK
-    if not STRICT_AGENT_RESPONSE.fullmatch(message.strip()):
-        return INVALID_RESPONSE_FORMAT
     return None
 
 
 def extract_python_code(message: str) -> str:
-    match = STRICT_AGENT_RESPONSE.fullmatch(message.strip())
+    match = PYTHON_BLOCK.findall(message.strip())
     if not match:
-        raise ValueError("Cannot extract code from invalid agent response.")
-    return match.group(1)
+        match = JSON_BLOCK.findall(message.strip())
+        if not match:
+            raise ValueError("Cannot extract code from invalid agent response.")
+    return match[0]
 
 
 def token_counts(response: Any) -> tuple[int, int]:
@@ -91,6 +89,7 @@ class Orchestrator:
         self.exit_stack = AsyncExitStack()
         self.sandbox = Sandbox(sandbox_conf, target, eval_script)
         self.model = model
+        self.api_index = 0
         self.llm = OpenAI(
             api_key=API_KEY,
             base_url=url,
@@ -105,15 +104,25 @@ class Orchestrator:
 
         while True:
             try:
+                model = pick_model(None) if self.model == "agentsmith" else self.model
+                print("Using:", model)
                 response = self.llm.chat.completions.create(
-                    model=self.model,
+                    model=model,
                     messages=messages,
                 )
                 return (response,
                         round((time.perf_counter() - started) * 1_000, 2),
                         retries)
-            except (APIConnectionError, APIStatusError,
+            except (APIConnectionError, APIStatusError, 
                     APITimeoutError) as error:
+                if is_retryable_error(error) and error.status_code == 429:
+                    try:
+                        print("Rate Limit Exceeded. switching API key")
+                        self.api_index += 1
+                        API_KEY = API_KEYS[self.api_index]
+                        self.llm.api_key = API_KEY
+                    except Exception:
+                        raise
                 if (retries >= MAX_REQUEST_RETRIES
                         or not is_retryable_error(error)):
                     raise
@@ -147,81 +156,87 @@ class Orchestrator:
         total_requests = 0
         start = time.perf_counter()
         result = None
+        error = ""
         turns = MBPP_MAX_TURN if benchmark == "mbpp" else SWEBENCH_MAX_TURN
-        for i in range(turns):
-            message = ""
-            sandbox_input = ""
-            sandbox_output = ""
-            observation = ""
-            print(f"\nTURN: ({i+1}/{turns}):")
+        try:
+            for i in range(turns):
+                message = ""
+                sandbox_input = ""
+                sandbox_output = ""
+                observation = ""
+                print(f"\nTURN: ({i+1}/{turns}):")
 
-            response, time_ms, retries = await self.create_completion(messages)
-            total_requests += retries + 1
+                response, time_ms, retries = await self.create_completion(messages)
+                total_requests += retries + 1
 
-            input_tokens, output_tokens = token_counts(response)
-            message = response.choices[0].message.content
-            llm_output = message if message else ""
-            print(llm_output)
+                input_tokens, output_tokens = token_counts(response)
+                if response.choices:
+                    message = response.choices[0].message.content
+                llm_output = message if message else ""
+                print(llm_output)
 
-            protocol_error = response_protocol_error(llm_output)
-            if protocol_error:
-                observation = protocol_error
-                sandbox_output = "Sandbox output:\n" + observation
-                messages.append({"role": "assistant",
-                                 "content": llm_output or "<empty response>"})
-                messages.append({"role": "user", "content": sandbox_output})
-            else:
-                sandbox_input = extract_python_code(llm_output)
-                result = await self.sandbox.run(sandbox_input)
-                if result.final_answer:
-                    success = True
-                observation = result.output
-                if result.error:
-                    observation += f"{RED}ERROR: {result.error}{RESET}"
+                protocol_error = response_protocol_error(llm_output)
+                if protocol_error:
+                    observation = protocol_error
+                    sandbox_output = "Sandbox output:\n" + observation
+                    messages.append({"role": "assistant",
+                                     "content": llm_output or "<empty response>"})
+                    messages.append({"role": "user", "content": sandbox_output})
+                else:
+                    sandbox_input = extract_python_code(llm_output)
+                    result = await self.sandbox.run(sandbox_input)
+                    if result.final_answer:
+                        success = True
+                    observation = result.output
+                    if result.error:
+                        observation += f"{RED}ERROR: {result.error}{RESET}"
 
-                sandbox_output = "Sandbox output:\n" + observation
-                messages.append({"role": "assistant", "content": llm_output})
-                messages.append({"role": "user", "content": sandbox_output})
+                    sandbox_output = "Sandbox output:\n" + observation
+                    messages.append({"role": "assistant", "content": llm_output})
+                    messages.append({"role": "user", "content": sandbox_output})
 
-            print(f"\n{YELLOW}SANDBOX:\n{observation}{RESET}")
+                print(f"\n{YELLOW}SANDBOX:\n{observation}{RESET}")
 
-            steps.append(StepMetrics(
-                step=i + 1,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                request_time_ms=time_ms,
-                api_url=args.provider_url,
-                model_name=response.model,
-                llm_output=llm_output,
-                sandbox_input=sandbox_input,
-                sandbox_output=sandbox_output,
-                retries=retries,
-            ))
-            if success:
-                break
+                steps.append(StepMetrics(
+                    step=i + 1,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    request_time_ms=time_ms,
+                    api_url=args.provider_url,
+                    model_name=response.model,
+                    llm_output=llm_output,
+                    sandbox_input=sandbox_input,
+                    sandbox_output=sandbox_output,
+                    retries=retries,
+                ))
+                if success:
+                    break
+        except Exception as e:
+            print(e)
+            traceback.print_exc()
+            error = str(e)
+        finally:
+            if success is False and error == "":
+                error = RED + MAX_TURN_ERROR + RESET
 
-        error = None
-        if success is False:
-            error = RED + MAX_TURN_ERROR + RESET
+            sol = result.final_answer if result and result.final_answer else ""
+            task_id = str(task.task_id) if isinstance(
+                task, MBPPTaskInput) else task.instance_id
 
-        solutio = result.final_answer if result and result.final_answer else ""
-        task_id = str(task.task_id) if isinstance(
-            task, MBPPTaskInput) else task.instance_id
-
-        return SolutionOutput(
-            task_id=task_id,
-            benchmark=benchmark,
-            success=success,
-            solution=solutio,
-            iterations=len(steps),
-            total_requests=total_requests,
-            total_input_tokens=sum(step.input_tokens for step in steps),
-            total_output_tokens=sum(step.output_tokens for step in steps),
-            total_time_seconds=round(time.perf_counter() - start, 2),
-            steps=steps,
-            system_prompt=system_prompt,
-            error=error,
-        )
+            return SolutionOutput(
+                task_id=task_id,
+                benchmark=benchmark,
+                success=success,
+                solution=sol,
+                iterations=len(steps),
+                total_requests=total_requests,
+                total_input_tokens=sum(step.input_tokens for step in steps),
+                total_output_tokens=sum(step.output_tokens for step in steps),
+                total_time_seconds=round(time.perf_counter() - start, 2),
+                steps=steps,
+                system_prompt=system_prompt,
+                error=error or "",
+            )
 
     async def cleanup(self) -> None:
         """Clean up resources"""

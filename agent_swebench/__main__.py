@@ -1,3 +1,4 @@
+import traceback
 import argparse
 import asyncio
 import json
@@ -8,7 +9,7 @@ from helper.misc import GREEN, RESET
 from dotenv import load_dotenv
 from helper.orchestrator import Orchestrator
 from helper.data_models import SWEBenchTaskInput, SandboxConfig
-from helper.models import model_pool_help, pick_model
+from helper.models import model_pool_help
 
 load_dotenv()
 
@@ -105,7 +106,7 @@ async def real_main() -> None:
                     help="input file containing SWE-bench task")
     ap.add_argument("--output", default="solution.json",
                     help="output file path")
-    ap.add_argument("--model-name", default=None,
+    ap.add_argument("--model-name", default="openrouter/free",
                     help=("LLM name override. If omitted, one is picked from: "
                           f"{model_pool_help()}"))
     ap.add_argument("--provider-url", default="https://openrouter.ai/api/v1",
@@ -115,8 +116,6 @@ async def real_main() -> None:
     ap.add_argument("--sandbox-conf", default=None,
                     help="sandbox JSON config")
     args = ap.parse_args()
-    args.model_name = pick_model(args.model_name)
-    print("Using model:", args.model_name)
 
     sandbox_conf = SandboxConfig()
     if (args.sandbox_conf):
@@ -153,8 +152,11 @@ async def real_main() -> None:
             f.write(task.eval_script)
         await client.sandbox.init_mcp_client()
         result = await client.process_query(task, args)
-        print(f"{GREEN}FINAL ANSWER:\n{result.solution}{RESET}\n")
         solution = result.model_dump_json(indent=4)
+        with open(args.output, "w") as f:
+            f.write(solution)
+        if result.solution != "":
+            print(f"{GREEN}FINAL ANSWER:\n{result.solution}{RESET}\n")
         print("task_id:", result.task_id)
         print("benchmark:", result.benchmark)
         print("success:", result.success)
@@ -164,8 +166,6 @@ async def real_main() -> None:
         print("total_output_tokens:", result.total_output_tokens)
         print("total_time_seconds:", result.total_time_seconds)
         print("timestamp:", result.timestamp)
-        with open(args.output, "w") as f:
-            f.write(solution)
     finally:
         if client:
             await client.cleanup()
@@ -189,3 +189,4 @@ if __name__ == "__main__":
             )
     except Exception as e:
         print(e)
+        traceback.print_exc()

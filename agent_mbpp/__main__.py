@@ -57,8 +57,11 @@ async def real_main() -> None:
         )
         await client.sandbox.init_mcp_client(task.test_imports, task.test_list)
         result = await client.process_query(task, args)
-        print(f"{GREEN}FINAL ANSWER:\n{result.solution}{RESET}\n")
         solution = result.model_dump_json(indent=4)
+        with open(args.output, "w") as f:
+            f.write(solution)
+        if result.solution != "":
+            print(f"{GREEN}FINAL ANSWER:\n{result.solution}{RESET}\n")
         print("task_id:", result.task_id)
         print("benchmark:", result.benchmark)
         print("success:", result.success)
@@ -68,8 +71,6 @@ async def real_main() -> None:
         print("total_output_tokens:", result.total_output_tokens)
         print("total_time_seconds:", result.total_time_seconds)
         print("timestamp:", result.timestamp)
-        with open(args.output, "w") as f:
-            f.write(solution)
     finally:
         if client:
             await client.cleanup()
