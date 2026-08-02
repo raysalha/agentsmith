@@ -1,5 +1,6 @@
 import re
 import os
+import shlex
 import argparse
 import fnmatch
 import subprocess
@@ -12,6 +13,14 @@ EVAL_SCRIPT_PATH: str = ""
 ALLOWED_DIRECTORIES: tuple[str, ...] = ()
 
 mcp = FastMCP("agent_bob")
+
+
+def _bounded_output(text: str, limit: int = 16000) -> str:
+    if len(text) <= limit:
+        return text
+    return (text[:limit // 2] +
+            "\n...[output truncated]...\n" +
+            text[-limit // 2:])
 
 
 def _is_allowed(path: str) -> bool:
@@ -57,6 +66,41 @@ def _resolve_and_check(path: str) -> tuple[str, str | None]:
 def _repository_root() -> str | None:
     """The first directory is the repository used for repo-wide operations."""
     return ALLOWED_DIRECTORIES[0] if ALLOWED_DIRECTORIES else None
+
+
+def _is_safe_command(command: str) -> tuple[bool, str | None]:
+    """Reject shell syntax or paths that could escape the allowlisted workspace."""
+    if not command or not command.strip():
+        return False, "Error: a command is required"
+
+    blocked_tokens = (";", "&&", "||", "|", ">", "<", "$(", "`")
+    if any(token in command for token in blocked_tokens):
+        return False, (
+            "Error: command contains blocked shell syntax; only simple "
+            "single-command invocations are allowed"
+        )
+
+    try:
+        parts = shlex.split(command, posix=True)
+    except ValueError as exc:
+        return False, f"Error: could not parse command: {exc}"
+
+    for part in parts:
+        if part in {".", ".."}:
+            return False, "Error: path traversal is not allowed"
+
+        if os.path.isabs(part):
+            abs_part = os.path.realpath(part)
+            if not _is_allowed(abs_part):
+                return False, (
+                    f"Error: command path '{part}' is outside the allowed directories"
+                )
+            continue
+
+        if any(segment == ".." for segment in part.split(os.sep)):
+            return False, "Error: path traversal is not allowed"
+
+    return True, None
 
 
 @mcp.tool()
@@ -106,7 +150,7 @@ def read_file(filepath: str, start_line: int, end_line: int) -> str:
     if start_line > len(lines):
         return (
             f"Error: start_line {start_line} exceeds "
-            "file length ({len(lines)} lines)"
+            f"file length ({len(lines)} lines)"
         )
 
     selected = lines[start_line - 1:end_line]
@@ -302,6 +346,7 @@ def search_function_or_class_definition_in_code(name: str) -> str:
     if not ALLOWED_DIRECTORIES:
         return "Error: no allowed directories are configured"
     res = []
+    name = re.sub(r"^(?:class|def)\s+", "", name.strip())
     rgx = re.compile(rf"^\s*(?:async\s+def|def|class)\s+{re.escape(name)}\b")
 
     for directory in ALLOWED_DIRECTORIES:
@@ -424,8 +469,8 @@ def run_tests() -> str:
 
     return (
         f"exit_code: {result.returncode}\n"
-        f"--- stdout ---\n{result.stdout}\n"
-        f"--- stderr ---\n{result.stderr}"
+        f"--- stdout ---\n{_bounded_output(result.stdout)}\n"
+        f"--- stderr ---\n{_bounded_output(result.stderr)}"
     )
 
 
@@ -509,10 +554,20 @@ def run_command(command: str, workdir: str = ".") -> str:
     if not os.path.isdir(abs_workdir):
         return f"Error: working directory not found: {workdir}"
 
+    safe, safe_err = _is_safe_command(command)
+    if not safe:
+        return safe_err
+
+    if not command.strip().startswith(("git", "python", "pytest", "./", "../")):
+        return (
+            "Error: use the MCP repository tools instead of shell commands for this task. "
+            "Prefer read_file, edit_file, run_tests(), and get_patch()."
+        )
+
     try:
         result = subprocess.run(
             command,
-            shell=True,          # <-- lets >, |, &&, heredocs etc. work
+            shell=True,
             cwd=abs_workdir,
             capture_output=True,
             text=True,
@@ -525,8 +580,8 @@ def run_command(command: str, workdir: str = ".") -> str:
 
     return (
         f"exit_code: {result.returncode}\n"
-        f"--- stdout ---\n{result.stdout}\n"
-        f"--- stderr ---\n{result.stderr}"
+        f"--- stdout ---\n{_bounded_output(result.stdout)}\n"
+        f"--- stderr ---\n{_bounded_output(result.stderr)}"
     )
 
 

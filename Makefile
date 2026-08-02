@@ -22,7 +22,7 @@ run_swebench:
 	$(PY) agent_swebench \
 		--task-file swe_tasks/pydata__xarray-4094.json \
 		--output swebench_solution.json \
-		--model-name openrouter/free \
+		--model-name agentsmith \
 		--provider-url https://openrouter.ai/api/v1 \
 		--target mcp_tools_swebench.py
 

@@ -17,3 +17,4 @@ logs/
 mbpp_tasks/
 swe_tasks/
 *.json
+*.log

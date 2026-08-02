@@ -41,6 +41,9 @@ Thought:
 # python code only
 ```"""
 
+EMPTY_SANDBOX_OUTPUT = ("Sandbox output is empty. did you forget to print the "
+                        "tool result?")
+
 MORE_THAN_ONE_CODE_BLOCK = """
 ERROR: Your previous response violated the required protocol.
 Reason: More than one Python code block was generated.

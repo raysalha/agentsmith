@@ -69,16 +69,22 @@ class Sandbox:
 
         async def handle_tool_call(tool_name: str, kwargs: dict) -> None:
             try:
-                if self.client.session:
-                    call_result = await self.client.session.call_tool(
-                        tool_name, kwargs)
+                if not self.client.session:
+                    parent_conn.send(("tool_error", "MCP session is not initialized"))
+                    return
+                call_result = await self.client.session.call_tool(tool_name, kwargs)
                 output = "\n".join(
                     block.text for block in call_result.content
                     if hasattr(block, "text")
                 )
-                parent_conn.send(("tool_result", output))
+                if process.is_alive():
+                    parent_conn.send(("tool_result", output))
             except Exception as exc:
-                parent_conn.send(("tool_error", str(exc)))
+                try:
+                    if process.is_alive():
+                        parent_conn.send(("tool_error", f"MCP tool '{tool_name}' failed: {exc}"))
+                except (BrokenPipeError, EOFError, OSError):
+                    pass
 
         def receive_child_message() -> None:
             try:
@@ -92,7 +98,8 @@ class Sandbox:
                         result.set_result(payload[0])
             except EOFError:
                 if not result.done():
-                    result.set_result({"error": EXIT_ERROR})
+                    result.set_result({"output": "", "final_answer": None,
+                                       "error": EXIT_ERROR})
 
         loop.add_reader(parent_conn.fileno(), receive_child_message)
         try:
@@ -156,7 +163,10 @@ def _execute_in_child(
             for allowed in authorized_imports
         ):
             return __import__(name, globals, locals, fromlist, level)
-        raise ImportError(f"Import '{name}' is not allowed.")
+            allowed_imports = ", ".join(authorized_imports)
+        res: str = f"Import '{name}' is not allowed\n"
+        res += f"Only these imports are authorized: {authorized_imports}"
+        raise ImportError(res)
 
     def make_wrapper(tool_name: str, parameter_names: tuple[str, ...]) -> Any:
         def wrapper(*args: Any, **kwargs: Any) -> Any:

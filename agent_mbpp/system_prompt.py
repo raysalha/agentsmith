@@ -97,6 +97,17 @@ The sandbox will return the printed output.
 Use that output to fix the implementation and try again.
 
 Never call final_answer() unless run_tests() reports success.
+Only use run_command() when absolutely necessary; prefer run_tests() and the
+defined repository tools instead.
+
+CRITICAL - NEVER use pip install or any package manager.
+CRITICAL - NEVER use run_command() unless the solution SPECIFICALLY requires it.
+When you finish coding, your next action should be to call run_tests() and then
+final_answer() only if tests pass.
+Do not substitute shell commands or direct Python execution for run_tests().
+
+run_tests() is the ONLY way to verify your solution. Do not attempt manual
+verification with run_command or direct Python execution.
 
 ==============================
 RESPONSE FORMAT
@@ -166,6 +177,9 @@ If the sandbox reports:
 Correct ONLY the formatting problem.
 
 Do NOT change the implementation unless the sandbox reports failing tests or a code execution error.
+If the sandbox output is empty, print the tool results or error details explicitly.
+If an import is rejected, remind yourself of the available imports and only use
+those listed in the sandbox environment.
 
 ==============================
 INVALID RESPONSES

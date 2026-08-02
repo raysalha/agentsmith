@@ -106,7 +106,7 @@ async def real_main() -> None:
                     help="input file containing SWE-bench task")
     ap.add_argument("--output", default="solution.json",
                     help="output file path")
-    ap.add_argument("--model-name", default="openrouter/free",
+    ap.add_argument("--model-name", default="agentsmith",
                     help=("LLM name override. If omitted, one is picked from: "
                           f"{model_pool_help()}"))
     ap.add_argument("--provider-url", default="https://openrouter.ai/api/v1",
