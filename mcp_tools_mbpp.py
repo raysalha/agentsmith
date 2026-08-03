@@ -1,5 +1,6 @@
 import argparse
 import io
+import json
 import traceback
 from contextlib import redirect_stdout
 from typing import Any
@@ -15,12 +16,15 @@ mcp = FastMCP("agent_bob")
 
 
 @mcp.tool()
-def run_tests(code: str) -> str:
-    """Execute generated code against a list of tests
-    and Returns a human-readable report."""
+def run_tests(code: str, test_list: list[str] | None = None) -> str:
+    """Execute generated code against a list of tests and return JSON."""
 
+    selected_tests = tuple(test_list or TESTS)
     namespace: dict[Any, Any] = {}
     stdout = io.StringIO()
+    passed = 0
+    failed = []
+
     try:
         with redirect_stdout(stdout):
             # Execute required imports
@@ -31,10 +35,7 @@ def run_tests(code: str) -> str:
             exec(code, namespace)
 
             # Execute tests
-            passed = 0
-            failed = []
-
-            for i, test in enumerate(TESTS, start=1):
+            for i, test in enumerate(selected_tests, start=1):
                 try:
                     exec(test, namespace)
                     passed += 1
@@ -48,31 +49,39 @@ def run_tests(code: str) -> str:
                     )
 
     except Exception:
-        return (
-            "Code failed to execute.\n\n"
-            + traceback.format_exc()
+        return json.dumps(
+            {
+                "success": False,
+                "passed": 0,
+                "total": len(selected_tests) if selected_tests else 0,
+                "output": traceback.format_exc(),
+            }
         )
 
-    report = []
-    report.append(f"Passed {passed}/{len(TESTS)} tests.")
+    report_lines = []
+    report_lines.append(f"Passed {passed}/{len(selected_tests)} tests.")
 
     output = stdout.getvalue()
     if output:
-        report.append("\nCaptured stdout:")
-        report.append(output.rstrip())
+        report_lines.append("\nCaptured stdout:")
+        report_lines.append(output.rstrip())
 
     if failed:
-        report.append("\nFailed tests:\n")
-
+        report_lines.append("\nFailed tests:\n")
         for failure in failed:
-            report.append(f"Test #{failure['index']}:")
-            report.append(str(failure["test"]))
-            report.append(str(failure["traceback"]))
-
+            report_lines.append(f"Test #{failure['index']}:")
+            report_lines.append(str(failure["test"]))
+            report_lines.append(str(failure["traceback"]))
     else:
-        report.append("\nAll tests passed.\nyou can now run final_answer()")
+        report_lines.append("\nAll tests passed.\nyou can now run final_answer()")
 
-    return "\n".join(report)
+    payload = {
+        "success": not failed,
+        "passed": passed,
+        "total": len(selected_tests),
+        "output": "\n".join(report_lines),
+    }
+    return json.dumps(payload)
 
 
 def main() -> None:
@@ -87,8 +96,6 @@ def main() -> None:
     global IMPORTS
     IMPORTS = tuple(imp for imp in args.imports)
 
-    if not args.tests:
-        parser.error("at least one --tests is required")
     global TESTS
     TESTS = tuple(test for test in args.tests)
 

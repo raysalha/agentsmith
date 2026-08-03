@@ -152,9 +152,9 @@ CRITICAL RESTRICTIONS:
 - If you need to verify or finish the task, prefer run_tests() and get_patch() over shell commands.
 - If you are tempted to use shell commands for verification, stop and call run_tests() instead.
 
-The repo root is "/tmp/agent/". Tool paths may be absolute or relative to
+The repo root is "/testbed/". Tool paths may be absolute or relative to
 that root. run_command(workdir=...) is already relative to the repository;
-do not prefix its command with `cd /tmp/agent`.
+do not prefix its command with `cd /testbed`.
 
 ==============================
 RESPONSE FORMAT

@@ -16,7 +16,7 @@ load_dotenv()
 
 def setup_docker(task: SWEBenchTaskInput) -> tuple[Any, Any]:
     image = task.docker_image
-    volume_dir = "/tmp/agent"
+    volume_dir = "/testbed"
     os.makedirs(volume_dir, exist_ok=True)
 
     print("Downloading image...")

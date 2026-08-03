@@ -556,7 +556,7 @@ def run_command(command: str, workdir: str = ".") -> str:
 
     safe, safe_err = _is_safe_command(command)
     if not safe:
-        return safe_err
+        return safe_err or ""
 
     if not command.strip().startswith(("git", "python", "pytest", "./", "../")):
         return (
