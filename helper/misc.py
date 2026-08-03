@@ -79,3 +79,5 @@ SAFETY_MSG = ("Your previous response was provider safety metadata, not an "
 MAX_TURN_ERROR = "Unable to complete the task within the tool-turn limit."
 
 EXIT_ERROR = "Sandbox process exited unexpectedly"
+
+NO_GITPATCH = "Final answer was not a non-empty git patch."

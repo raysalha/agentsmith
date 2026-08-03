@@ -69,7 +69,7 @@ def _repository_root() -> str | None:
 
 
 def _is_safe_command(command: str) -> tuple[bool, str | None]:
-    """Reject shell syntax or paths that could escape the allowlisted workspace."""
+    """Reject shell syntax or paths that could escape the allowli workspace."""
     if not command or not command.strip():
         return False, "Error: a command is required"
 
@@ -93,7 +93,8 @@ def _is_safe_command(command: str) -> tuple[bool, str | None]:
             abs_part = os.path.realpath(part)
             if not _is_allowed(abs_part):
                 return False, (
-                    f"Error: command path '{part}' is outside the allowed directories"
+                    f"Error: command path '{part}' is outside the allowed "
+                    "directories"
                 )
             continue
 
@@ -558,9 +559,11 @@ def run_command(command: str, workdir: str = ".") -> str:
     if not safe:
         return safe_err or ""
 
-    if not command.strip().startswith(("git", "python", "pytest", "./", "../")):
+    if not command.strip().startswith(("git", "python", "pytest",
+                                       "./", "../")):
         return (
-            "Error: use the MCP repository tools instead of shell commands for this task. "
+            "Error: use the MCP repository tools instead of shell commands "
+            "for this task. "
             "Prefer read_file, edit_file, run_tests(), and get_patch()."
         )
 

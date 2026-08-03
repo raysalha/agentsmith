@@ -56,7 +56,8 @@ class MCPClient:
 
             should_pass_tool_args = (
                 script_path is not None
-                and Path(script_path).name in {"mcp_tools_mbpp.py", "mcp_tools_swebench.py"}
+                and Path(script_path).name in {"mcp_tools_mbpp.py",
+                                               "mcp_tools_swebench.py"}
             )
             if should_pass_tool_args:
                 for directory in allowed_directories or []:

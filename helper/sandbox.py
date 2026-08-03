@@ -70,9 +70,13 @@ class Sandbox:
         async def handle_tool_call(tool_name: str, kwargs: dict) -> None:
             try:
                 if not self.client.session:
-                    parent_conn.send(("tool_error", "MCP session is not initialized"))
+                    parent_conn.send((
+                        "tool_error",
+                        "MCP session is not initialized"
+                    ))
                     return
-                call_result = await self.client.session.call_tool(tool_name, kwargs)
+                call_result = await self.client.session.call_tool(tool_name,
+                                                                  kwargs)
                 output = "\n".join(
                     block.text for block in call_result.content
                     if hasattr(block, "text")
@@ -82,7 +86,8 @@ class Sandbox:
             except Exception as exc:
                 try:
                     if process.is_alive():
-                        parent_conn.send(("tool_error", f"MCP tool '{tool_name}' failed: {exc}"))
+                        e = f"MCP tool '{tool_name}' failed: {exc}"
+                        parent_conn.send(("tool_error", e))
                 except (BrokenPipeError, EOFError, OSError):
                     pass
 

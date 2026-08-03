@@ -73,7 +73,8 @@ def run_tests(code: str, test_list: list[str] | None = None) -> str:
             report_lines.append(str(failure["test"]))
             report_lines.append(str(failure["traceback"]))
     else:
-        report_lines.append("\nAll tests passed.\nyou can now run final_answer()")
+        e = "\nAll tests passed.\nyou can now run final_answer()"
+        report_lines.append(e)
 
     payload = {
         "success": not failed,

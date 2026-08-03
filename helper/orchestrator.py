@@ -17,6 +17,7 @@ from helper.data_models import SolutionOutput, StepMetrics
 from helper.misc import MAX_TURN_ERROR, MBPP_MAX_TURN, MORE_THAN_ONE_CODE_BLOCK
 from helper.misc import RED, RESET, SWEBENCH_MAX_TURN, YELLOW, SAFETY_MSG
 from helper.misc import NO_CODE_BLOCK, EMPTY_LLM_RESPONSE, EMPTY_SANDBOX_OUTPUT
+from helper.misc import NO_GITPATCH
 from helper.models import get_model_candidates, pick_model
 from helper.sandbox import Sandbox
 
@@ -108,7 +109,7 @@ class Orchestrator:
         self.model_candidates = get_model_candidates(main_model)
         self.current_model_index = 0
         self.model = self.model_candidates[0]
-        self.api_index = 0
+        self.index = 0
         self.llm = OpenAI(
             api_key=API_KEY,
             base_url=url,
@@ -146,13 +147,13 @@ class Orchestrator:
                 await asyncio.sleep(min(2 ** (retries - 1), 8))
             except APIStatusError as e:
                 if e.status_code == 429 and len(API_KEYS) > 1:
-                    self.api_index = (self.api_index + 1) % len(API_KEYS)
+                    self.index = (self.index + 1) % len(API_KEYS)
                     print("Rate limit exceeded; switching API key")
-                    self.llm.api_key = API_KEYS[self.api_index]
+                    self.llm.api_key = API_KEYS[self.index]
                 elif self.rotate_model():
                     retries = 0
-                    self.api_index = 0
-                    self.llm.api_key = API_KEYS[self.api_index] if API_KEYS else ""
+                    self.index = 0
+                    self.llm.api_key = API_KEYS[self.index] if API_KEYS else ""
                     print("Rate limit or provider error; rotating model")
                 elif retries >= MAX_REQUEST_RETRIES or not is_retryable(e):
                     raise
@@ -200,7 +201,8 @@ class Orchestrator:
                 protocol_attempt = 0
                 while True:
                     try:
-                        response, time_ms, retries = await self.create_completion(messages)
+                        lol = await self.create_completion(messages)
+                        response, time_ms, retries = lol
                     except Exception:
                         if self.rotate_model():
                             protocol_attempt = 0
@@ -235,8 +237,9 @@ class Orchestrator:
                     sandbox_input = extract_python_code(llm_output)
                     result = await self.sandbox.run(sandbox_input)
                     if result.final_answer:
-                        if benchmark == "swebench" and not is_valid_patch(result.final_answer):
-                            result.error = "Final answer was not a non-empty git patch."
+                        if (benchmark == "swebench" and not
+                                is_valid_patch(result.final_answer)):
+                            result.error = NO_GITPATCH
                             result.final_answer = None
                         else:
                             success = True
