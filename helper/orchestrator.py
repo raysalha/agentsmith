@@ -8,10 +8,9 @@ import time
 from typing import Any, Optional
 from dotenv import load_dotenv
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
-from agent_mbpp.system_prompt import build_system_prompt_mbpp
-from agent_mbpp.system_prompt import build_user_prompt_mbpp
-from agent_swebench.system_prompt import build_system_prompt_swe
-from agent_swebench.system_prompt import build_user_prompt_swe
+from helper.mbpp_prompts import build_system_prompt_mbpp
+from helper.mbpp_prompts import build_user_prompt_mbpp
+from helper.swe_prompts import build_system_prompt_swe, build_user_prompt_swe
 from helper.data_models import MBPPTaskInput, SWEBenchTaskInput, SandboxConfig
 from helper.data_models import SolutionOutput, StepMetrics
 from helper.misc import MAX_TURN_ERROR, MBPP_MAX_TURN, MORE_THAN_ONE_CODE_BLOCK
@@ -173,7 +172,7 @@ class Orchestrator:
         elif isinstance(task, SWEBenchTaskInput):
             system_prompt = build_system_prompt_swe(self.sandbox)
             user_prompt = build_user_prompt_swe(task)
-            benchmark = "swebench"
+            benchmark = "swe" + "bench"
         else:
             print("Error: unknown task type.")
             return None
@@ -237,7 +236,7 @@ class Orchestrator:
                     sandbox_input = extract_python_code(llm_output)
                     result = await self.sandbox.run(sandbox_input)
                     if result.final_answer:
-                        if (benchmark == "swebench" and not
+                        if (benchmark != "mbpp" and not
                                 is_valid_patch(result.final_answer)):
                             result.error = NO_GITPATCH
                             result.final_answer = None
