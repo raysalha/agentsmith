@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import subprocess
 from typing import Any
 from helper.misc import GREEN, RESET
@@ -12,6 +13,30 @@ from helper.data_models import SWEBenchTaskInput, SandboxConfig
 from helper.models import model_pool_help
 
 load_dotenv()
+
+
+def determine_python_version(image: str) -> str:
+    result = subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            image,
+            "bash",
+            "-lc",
+            "source /opt/miniconda3/bin/activate testbed && python --version",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    output = (result.stdout + result.stderr).strip()
+    m = re.search(r"Python (\d+\.\d+)", output)
+    if not m:
+        raise RuntimeError(f"Couldn't determine Python version: {output}")
+
+    return m.group(1)
 
 
 def setup_docker(task: SWEBenchTaskInput) -> tuple[Any, Any]:
@@ -139,6 +164,23 @@ async def real_main() -> None:
 
     try:
         container_name, volume_dir = setup_docker(task)
+        python_version = determine_python_version(task.docker_image)
+        print(f"Detected Python {python_version}")
+        print("Installing dependencies...")
+        subprocess.run(
+            [
+                "bash",
+                "-lc",
+                """
+                source /opt/miniconda3/bin/activate testbed
+                cd /testbed
+                python -m pip install --upgrade pip setuptools wheel
+                python -m pip install pytest numpy scipy
+                python -m pip install cython joblib threadpoolctl
+                """,
+            ],
+            check=True,
+        )
         os.environ["AGENT_DOCKER_CONTAINER"] = container_name
         sandbox_conf.allowed_directories = [volume_dir]
         client = Orchestrator(

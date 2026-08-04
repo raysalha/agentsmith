@@ -20,7 +20,7 @@ run_mbpp:
 run_swebench:
 	clear
 	$(PY) agent_swebench \
-		--task-file swe_tasks/pydata__xarray-4094.json \
+		--task-file swe_tasks/scikit-learn__scikit-learn-13439.json \
 		--output swebench_solution.json \
 		--model-name agentsmith \
 		--provider-url https://openrouter.ai/api/v1 \

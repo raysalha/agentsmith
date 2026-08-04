@@ -47,6 +47,7 @@ Never:
 The user ONLY sees the argument passed to final_answer().
 
 You only have 10 turns and a maximum of 6000 input tokens and 1500 output tokens.
+You only have 2 minutes total to think and code.
 
 DO NOT execed these limits and generate responses wisely.
 

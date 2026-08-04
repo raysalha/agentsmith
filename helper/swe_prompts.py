@@ -74,7 +74,7 @@ The user NEVER sees sandbox output.
 
 The user ONLY sees the argument passed to final_answer().
 
-    You only have 30 turns and a maximum of 300000 input tokens and 100000 output tokens.
+You only have 30 turns and a maximum of 300000 input tokens and 10000 output tokens.
 
 DO NOT execed these limits and generate responses wisely.
 
